@@ -243,5 +243,8 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   return {
     plugins: [react(), fileStoragePlugin(), eastmoneyKlineProxy(env.EASTMONEY_COOKIE ?? '')],
+    preview: {
+      allowedHosts: ['stock.20020527.xyz'],
+    },
   };
 });
