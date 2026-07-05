@@ -1,11 +1,14 @@
 import { spawn } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { defineConfig, loadEnv } from 'vite';
+import type { PreviewServer, ViteDevServer } from 'vite';
 import react from '@vitejs/plugin-react';
 
 const EASTMONEY_KLINE_PATH = '/api/qt/stock/kline/get';
 const EASTMONEY_KLINE_UPSTREAM = 'https://push2his.eastmoney.com/api/qt/stock/kline/get';
+const EASTMONEY_COOKIE_FILE = 'eastmoney-cookie.txt';
 const STORAGE_PATH = '/api/storage';
 type Theme = 'light' | 'dark';
 
@@ -19,6 +22,8 @@ interface StorageData {
   metals: WatchItem[];
   theme?: Theme;
 }
+
+type MiddlewareServer = Pick<ViteDevServer, 'middlewares'> | Pick<PreviewServer, 'middlewares'>;
 
 const DEFAULT_STORAGE: StorageData = {
   watchlist: [
@@ -37,6 +42,34 @@ const DEFAULT_STORAGE: StorageData = {
 
 function storageFilePath(): string {
   return path.resolve(process.cwd(), 'data', 'storage.json');
+}
+
+function eastmoneyCookieFilePath(): string {
+  return path.resolve(process.cwd(), 'data', EASTMONEY_COOKIE_FILE);
+}
+
+function normalizeEastmoneyCookie(value: string | undefined): string {
+  const trimmed = value?.trim() ?? '';
+  const assignment = trimmed.match(/^EASTMONEY_COOKIE\s*=\s*(.*)$/s);
+  const raw = assignment ? assignment[1].trim() : trimmed;
+  if (
+    (raw.startsWith('"') && raw.endsWith('"')) ||
+    (raw.startsWith("'") && raw.endsWith("'"))
+  ) {
+    return raw.slice(1, -1).trim();
+  }
+  return raw;
+}
+
+function loadEastmoneyCookie(envCookie: string | undefined): string {
+  const fromEnv = normalizeEastmoneyCookie(envCookie);
+  if (fromEnv) return fromEnv;
+
+  try {
+    return normalizeEastmoneyCookie(readFileSync(eastmoneyCookieFilePath(), 'utf8'));
+  } catch {
+    return '';
+  }
 }
 
 function normalizeItems(value: unknown, fallback: WatchItem[]): WatchItem[] {
@@ -83,68 +116,75 @@ function readRequestBody(req: import('node:http').IncomingMessage): Promise<stri
   });
 }
 
+function registerFileStorageMiddleware(server: MiddlewareServer) {
+  server.middlewares.use(async (req, res, next) => {
+    if (!req.url) {
+      next();
+      return;
+    }
+    const url = new URL(req.url, 'http://localhost');
+    if (!url.pathname.startsWith(STORAGE_PATH)) {
+      next();
+      return;
+    }
+
+    try {
+      if (req.method === 'GET' && url.pathname === STORAGE_PATH) {
+        const data = await readStorageFile();
+        res.statusCode = 200;
+        res.setHeader('content-type', 'application/json; charset=utf-8');
+        res.end(JSON.stringify(data));
+        return;
+      }
+
+      if (
+        req.method === 'PUT' &&
+        (url.pathname === `${STORAGE_PATH}/watchlist` ||
+          url.pathname === `${STORAGE_PATH}/metals` ||
+          url.pathname === `${STORAGE_PATH}/theme`)
+      ) {
+        const raw = await readRequestBody(req);
+        const parsed = JSON.parse(raw) as unknown;
+        const data = await readStorageFile();
+        if (url.pathname.endsWith('/watchlist')) {
+          data.watchlist = normalizeItems(parsed, []);
+        } else if (url.pathname.endsWith('/metals')) {
+          data.metals = normalizeItems(parsed, []);
+        } else {
+          const theme =
+            typeof parsed === 'object' && parsed && 'theme' in parsed
+              ? normalizeTheme((parsed as { theme?: unknown }).theme)
+              : undefined;
+          if (!theme) {
+            res.statusCode = 400;
+            res.end('Invalid theme');
+            return;
+          }
+          data.theme = theme;
+        }
+        await writeStorageFile(data);
+        res.statusCode = 204;
+        res.end();
+        return;
+      }
+
+      res.statusCode = 405;
+      res.end('Method Not Allowed');
+    } catch (err) {
+      res.statusCode = 500;
+      res.end(err instanceof Error ? err.message : String(err));
+    }
+  });
+}
+
 function fileStoragePlugin() {
   return {
     name: 'file-storage-api',
-    configureServer(server) {
-      server.middlewares.use(async (req, res, next) => {
-        if (!req.url) {
-          next();
-          return;
-        }
-        const url = new URL(req.url, 'http://localhost');
-        if (!url.pathname.startsWith(STORAGE_PATH)) {
-          next();
-          return;
-        }
-
-        try {
-          if (req.method === 'GET' && url.pathname === STORAGE_PATH) {
-            const data = await readStorageFile();
-            res.statusCode = 200;
-            res.setHeader('content-type', 'application/json; charset=utf-8');
-            res.end(JSON.stringify(data));
-            return;
-          }
-
-          if (
-            req.method === 'PUT' &&
-            (url.pathname === `${STORAGE_PATH}/watchlist` ||
-              url.pathname === `${STORAGE_PATH}/metals` ||
-              url.pathname === `${STORAGE_PATH}/theme`)
-          ) {
-            const raw = await readRequestBody(req);
-            const parsed = JSON.parse(raw) as unknown;
-            const data = await readStorageFile();
-            if (url.pathname.endsWith('/watchlist')) {
-              data.watchlist = normalizeItems(parsed, []);
-            } else if (url.pathname.endsWith('/metals')) {
-              data.metals = normalizeItems(parsed, []);
-            } else {
-              const theme =
-                typeof parsed === 'object' && parsed && 'theme' in parsed
-                  ? normalizeTheme((parsed as { theme?: unknown }).theme)
-                  : undefined;
-              if (!theme) {
-                res.statusCode = 400;
-                res.end('Invalid theme');
-                return;
-              }
-              data.theme = theme;
-            }
-            await writeStorageFile(data);
-            res.statusCode = 204;
-            res.end();
-            return;
-          }
-
-          res.statusCode = 405;
-          res.end('Method Not Allowed');
-        } catch (err) {
-          res.statusCode = 500;
-          res.end(err instanceof Error ? err.message : String(err));
-        }
-      });
+    configureServer(server: ViteDevServer) {
+      registerFileStorageMiddleware(server);
+    },
+    configurePreviewServer(server: PreviewServer) {
+      registerFileStorageMiddleware(server);
     },
   };
 }
@@ -185,56 +225,63 @@ function runCurl(url: string, cookie: string): Promise<string> {
   });
 }
 
+function registerEastmoneyKlineProxy(server: MiddlewareServer, eastmoneyCookie: string) {
+  server.middlewares.use(EASTMONEY_KLINE_PATH, async (req, res, next) => {
+    if (!req.url) {
+      next();
+      return;
+    }
+    if (!eastmoneyCookie) {
+      res.statusCode = 500;
+      res.end(`Missing EASTMONEY_COOKIE or data/${EASTMONEY_COOKIE_FILE}`);
+      return;
+    }
+
+    const upstream = new URL(`${EASTMONEY_KLINE_UPSTREAM}${req.url}`);
+    try {
+      const response = await fetch(upstream, {
+        headers: {
+          Accept: '*/*',
+          'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+          Cookie: eastmoneyCookie,
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36',
+        },
+      });
+      if (!response.ok) {
+        throw new Error(`Eastmoney HTTP ${response.status}`);
+      }
+      res.statusCode = 200;
+      res.setHeader('content-type', 'application/javascript; charset=utf-8');
+      res.end(await response.text());
+    } catch (fetchError) {
+      try {
+        const text = await runCurl(upstream.toString(), eastmoneyCookie);
+        res.statusCode = 200;
+        res.setHeader('content-type', 'application/javascript; charset=utf-8');
+        res.end(text);
+      } catch (curlError) {
+        res.statusCode = 502;
+        res.end(
+          `Eastmoney K line proxy failed: ${
+            curlError instanceof Error ? curlError.message : String(curlError)
+          }; fetch fallback reason: ${
+            fetchError instanceof Error ? fetchError.message : String(fetchError)
+          }`
+        );
+      }
+    }
+  });
+}
+
 function eastmoneyKlineProxy(eastmoneyCookie: string) {
   return {
     name: 'eastmoney-kline-proxy',
-    configureServer(server) {
-      server.middlewares.use(EASTMONEY_KLINE_PATH, async (req, res, next) => {
-        if (!req.url) {
-          next();
-          return;
-        }
-        if (!eastmoneyCookie) {
-          res.statusCode = 500;
-          res.end('Missing EASTMONEY_COOKIE in .env.local');
-          return;
-        }
-
-        const upstream = new URL(`${EASTMONEY_KLINE_UPSTREAM}${req.url}`);
-        try {
-          const response = await fetch(upstream, {
-            headers: {
-              Accept: '*/*',
-              'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-              Cookie: eastmoneyCookie,
-              'User-Agent':
-                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36',
-            },
-          });
-          if (!response.ok) {
-            throw new Error(`Eastmoney HTTP ${response.status}`);
-          }
-          res.statusCode = 200;
-          res.setHeader('content-type', 'application/javascript; charset=utf-8');
-          res.end(await response.text());
-        } catch (fetchError) {
-          try {
-            const text = await runCurl(upstream.toString(), eastmoneyCookie);
-            res.statusCode = 200;
-            res.setHeader('content-type', 'application/javascript; charset=utf-8');
-            res.end(text);
-          } catch (curlError) {
-            res.statusCode = 502;
-            res.end(
-              `Eastmoney K line proxy failed: ${
-                curlError instanceof Error ? curlError.message : String(curlError)
-              }; fetch fallback reason: ${
-                fetchError instanceof Error ? fetchError.message : String(fetchError)
-              }`
-            );
-          }
-        }
-      });
+    configureServer(server: ViteDevServer) {
+      registerEastmoneyKlineProxy(server, eastmoneyCookie);
+    },
+    configurePreviewServer(server: PreviewServer) {
+      registerEastmoneyKlineProxy(server, eastmoneyCookie);
     },
   };
 }
@@ -242,7 +289,11 @@ function eastmoneyKlineProxy(eastmoneyCookie: string) {
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   return {
-    plugins: [react(), fileStoragePlugin(), eastmoneyKlineProxy(env.EASTMONEY_COOKIE ?? '')],
+    plugins: [
+      react(),
+      fileStoragePlugin(),
+      eastmoneyKlineProxy(loadEastmoneyCookie(env.EASTMONEY_COOKIE)),
+    ],
     preview: {
       allowedHosts: ['stock.20020527.xyz'],
     },
