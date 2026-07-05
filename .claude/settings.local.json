@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node probe-timeline.mjs)",
+      "Bash(npx tsc *)",
+      "Bash(node probe-kline.mjs)",
+      "Bash(node probe-us.mjs)",
+      "Bash(node probe-us2.mjs)",
+      "Bash(node -e ' *)",
+      "Bash(grep -o 'GLOBAL_FUTURES_MARKET[^;]\\\\{0,80\\\\}' node_modules/stock-sdk/dist/index.js)",
+      "Bash(grep -o '\\\\\"[A-Z]\\\\{1,4\\\\}\\\\\":[0-9]\\\\{2,3\\\\}' node_modules/stock-sdk/dist/index.js)",
+      "Bash(python -)"
+    ]
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "watchlist": [
+    {
+      "code": "sz000858",
+      "name": "五粮液"
+    },
+    {
+      "code": "sh601318",
+      "name": "中国平安"
+    },
+    {
+      "code": "sz300750",
+      "name": "宁德时代"
+    }
+  ],
+  "metals": [
+    {
+      "code": "AUM",
+      "name": "沪金主连"
+    },
+    {
+      "code": "AGM",
+      "name": "沪银主连"
+    }
+  ],
+  "theme": "dark"
+}
