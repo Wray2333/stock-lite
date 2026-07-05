@@ -9,6 +9,25 @@ import react from '@vitejs/plugin-react';
 const EASTMONEY_KLINE_PATH = '/api/qt/stock/kline/get';
 const EASTMONEY_KLINE_UPSTREAM = 'https://push2his.eastmoney.com/api/qt/stock/kline/get';
 const EASTMONEY_COOKIE_FILE = 'eastmoney-cookie.txt';
+const DEFAULT_EASTMONEY_COOKIE = [
+  'qgqp_b_id=0384d1d5165178cfad2a6b3f48537928',
+  'st_nvi=d1UmoPSDSo7G3bw9Igd5n9de9',
+  'websitepoptg_api_time=1783139101063',
+  'nid18=014d6e8b403a5ba33cd1d90a99717478',
+  'nid18_create_time=1783139101851',
+  'gviem=JFLxj7HdMrIN4Hp9ANTWG5c81',
+  'gviem_create_time=1783139101851',
+  'emshistory=%5B%22%E7%99%BD%E9%93%B6%22%5D',
+  'st_si=12704992319782',
+  'fullscreengg=1',
+  'fullscreengg2=1',
+  'st_asi=delete',
+  'st_pvi=84693584213840',
+  'st_sp=2025-11-03%2011%3A17%3A35',
+  'st_inirUrl=https%3A%2F%2Fwww.baidu.com%2Flink',
+  'st_sn=16',
+  'st_psi=20260705010600788-113200301201-6644234965',
+].join('; ');
 const STORAGE_PATH = '/api/storage';
 type Theme = 'light' | 'dark';
 
@@ -68,7 +87,7 @@ function loadEastmoneyCookie(envCookie: string | undefined): string {
   try {
     return normalizeEastmoneyCookie(readFileSync(eastmoneyCookieFilePath(), 'utf8'));
   } catch {
-    return '';
+    return DEFAULT_EASTMONEY_COOKIE;
   }
 }
 
@@ -191,8 +210,9 @@ function fileStoragePlugin() {
 
 function runCurl(url: string, cookie: string): Promise<string> {
   return new Promise((resolve, reject) => {
+    const curlCommand = process.platform === 'win32' ? 'curl.exe' : 'curl';
     const curl = spawn(
-      'curl.exe',
+      curlCommand,
       [
         '-sS',
         '--max-time',
