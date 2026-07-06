@@ -29,9 +29,19 @@ interface Props {
   quote: MetalQuote | undefined;
   theme: Theme;
   onToggleTheme: () => void;
+  sidebarCollapsed?: boolean;
+  onShowSidebar?: () => void;
 }
 
-export default function MetalDetail({ code, name, quote, theme, onToggleTheme }: Props) {
+export default function MetalDetail({
+  code,
+  name,
+  quote,
+  theme,
+  onToggleTheme,
+  sidebarCollapsed = false,
+  onShowSidebar,
+}: Props) {
   const [tab, setTab] = useState<ChartTab>('daily');
   const [kline, setKline] = useState<AppKline[] | null>(null);
   const [loading, setLoading] = useState(false);
@@ -81,28 +91,43 @@ export default function MetalDetail({ code, name, quote, theme, onToggleTheme }:
   return (
     <main className="detail">
       <ThemeToggle theme={theme} onToggle={onToggleTheme} />
-      <div className="detail-header">
-        <span className="detail-name">{displayName}</span>
-        <span className="detail-code">{code}</span>
-        <span className="detail-time" title={ex.full}>
-          {ex.label} · {ex.symbol}
-        </span>
-      </div>
-
-      <div className="detail-price-row">
-        <span className={`detail-price ${cls}`}>{fmtPrice(quote?.price)}</span>
-        <span className={`detail-change ${cls}`}>
-          {fmtChange(quote?.change)}　{fmtPercent(quote?.changePercent)}
-        </span>
-      </div>
-
-      <div className="stats-grid">
-        {stats.map((s) => (
-          <div key={s.full} className="stat-cell" title={s.full}>
-            <div className="stat-label">{s.label}</div>
-            <div className={`stat-value ${s.cls ?? ''}`}>{s.value}</div>
+      <div className="detail-summary">
+        <div className="detail-main-quote">
+          <div className="detail-header">
+            <span className="detail-name">{displayName}</span>
+            {sidebarCollapsed && onShowSidebar && (
+              <button
+                type="button"
+                className="detail-sidebar-restore"
+                aria-label="显示左侧栏"
+                title="显示左侧栏"
+                onClick={onShowSidebar}
+              >
+                ›
+              </button>
+            )}
+            <span className="detail-code">{code}</span>
+            <span className="detail-time" title={ex.full}>
+              {ex.label} · {ex.symbol}
+            </span>
           </div>
-        ))}
+
+          <div className="detail-price-row">
+            <span className={`detail-price ${cls}`}>{fmtPrice(quote?.price)}</span>
+            <span className={`detail-change ${cls}`}>
+              {fmtChange(quote?.change)}　{fmtPercent(quote?.changePercent)}
+            </span>
+          </div>
+        </div>
+
+        <div className="stats-grid">
+          {stats.map((s) => (
+            <div key={s.full} className="stat-cell" title={s.full}>
+              <div className="stat-label">{s.label}</div>
+              <div className={`stat-value ${s.cls ?? ''}`}>{s.value}</div>
+            </div>
+          ))}
+        </div>
       </div>
 
       <div className="chart-card">

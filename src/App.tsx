@@ -42,6 +42,7 @@ function applyTheme(theme: Theme): void {
 export default function App() {
   const [activeTab, setActiveTab] = useState<SidebarTab>('stock');
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [desktopSidebarCollapsed, setDesktopSidebarCollapsed] = useState(false);
   const [theme, setTheme] = useState<Theme>(() => loadTheme());
 
   const [watchlist, setWatchlist] = useState<WatchItem[]>(DEFAULT_WATCHLIST);
@@ -229,7 +230,11 @@ export default function App() {
   }, []);
 
   return (
-    <div className={`app${mobileSidebarOpen ? ' mobile-sidebar-open' : ''}`}>
+    <div
+      className={`app${mobileSidebarOpen ? ' mobile-sidebar-open' : ''}${
+        desktopSidebarCollapsed ? ' desktop-sidebar-collapsed' : ''
+      }`}
+    >
       <button
         type="button"
         className="mobile-watchlist-toggle"
@@ -244,6 +249,15 @@ export default function App() {
         onClick={() => setMobileSidebarOpen(false)}
       />
       <div className="sidebar-shell">
+        <button
+          type="button"
+          className="sidebar-collapse-button"
+          aria-label="隐藏左侧栏"
+          title="隐藏左侧栏"
+          onClick={() => setDesktopSidebarCollapsed(true)}
+        >
+          ‹
+        </button>
         <Watchlist
           activeTab={activeTab}
           onTabChange={setActiveTab}
@@ -269,6 +283,8 @@ export default function App() {
             quote={metalQuotes.get(detailCode)}
             theme={theme}
             onToggleTheme={toggleTheme}
+            sidebarCollapsed={desktopSidebarCollapsed}
+            onShowSidebar={() => setDesktopSidebarCollapsed(false)}
           />
         ) : (
           <StockDetail
@@ -276,6 +292,8 @@ export default function App() {
             quote={quotes.get(detailCode)}
             theme={theme}
             onToggleTheme={toggleTheme}
+            sidebarCollapsed={desktopSidebarCollapsed}
+            onShowSidebar={() => setDesktopSidebarCollapsed(false)}
           />
         )
       ) : (
