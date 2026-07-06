@@ -41,6 +41,7 @@ function applyTheme(theme: Theme): void {
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<SidebarTab>('stock');
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [theme, setTheme] = useState<Theme>(() => loadTheme());
 
   const [watchlist, setWatchlist] = useState<WatchItem[]>(DEFAULT_WATCHLIST);
@@ -217,24 +218,49 @@ export default function App() {
     void saveTheme(next);
   }, [theme]);
 
+  const handleSelectStock = useCallback((code: string) => {
+    setSelected(code);
+    setMobileSidebarOpen(false);
+  }, []);
+
+  const handleSelectMetal = useCallback((code: string) => {
+    setSelectedMetal(code);
+    setMobileSidebarOpen(false);
+  }, []);
+
   return (
-    <div className="app">
-      <Watchlist
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-        watchlist={watchlist}
-        quotes={quotes}
-        selected={selected}
-        onSelect={setSelected}
-        onAdd={handleAdd}
-        onRemove={handleRemove}
-        metals={metals}
-        metalQuotes={metalQuotes}
-        selectedMetal={selectedMetal}
-        onSelectMetal={setSelectedMetal}
-        onAddMetal={handleAddMetal}
-        onRemoveMetal={handleRemoveMetal}
+    <div className={`app${mobileSidebarOpen ? ' mobile-sidebar-open' : ''}`}>
+      <button
+        type="button"
+        className="mobile-watchlist-toggle"
+        onClick={() => setMobileSidebarOpen(true)}
+      >
+        {isMetalTab ? '金属' : '自选'}
+      </button>
+      <button
+        type="button"
+        className="mobile-sidebar-backdrop"
+        aria-label="关闭列表"
+        onClick={() => setMobileSidebarOpen(false)}
       />
+      <div className="sidebar-shell">
+        <Watchlist
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          watchlist={watchlist}
+          quotes={quotes}
+          selected={selected}
+          onSelect={handleSelectStock}
+          onAdd={handleAdd}
+          onRemove={handleRemove}
+          metals={metals}
+          metalQuotes={metalQuotes}
+          selectedMetal={selectedMetal}
+          onSelectMetal={handleSelectMetal}
+          onAddMetal={handleAddMetal}
+          onRemoveMetal={handleRemoveMetal}
+        />
+      </div>
       {detailCode ? (
         isMetalTab ? (
           <MetalDetail
