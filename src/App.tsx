@@ -229,19 +229,20 @@ export default function App() {
     setMobileSidebarOpen(false);
   }, []);
 
+  const handleShowSidebar = useCallback(() => {
+    if (typeof window !== 'undefined' && window.matchMedia('(max-width: 760px)').matches) {
+      setMobileSidebarOpen(true);
+      return;
+    }
+    setDesktopSidebarCollapsed(false);
+  }, []);
+
   return (
     <div
       className={`app${mobileSidebarOpen ? ' mobile-sidebar-open' : ''}${
         desktopSidebarCollapsed ? ' desktop-sidebar-collapsed' : ''
       }`}
     >
-      <button
-        type="button"
-        className="mobile-watchlist-toggle"
-        onClick={() => setMobileSidebarOpen(true)}
-      >
-        {isMetalTab ? '金属' : '自选'}
-      </button>
       <button
         type="button"
         className="mobile-sidebar-backdrop"
@@ -283,8 +284,7 @@ export default function App() {
             quote={metalQuotes.get(detailCode)}
             theme={theme}
             onToggleTheme={toggleTheme}
-            sidebarCollapsed={desktopSidebarCollapsed}
-            onShowSidebar={() => setDesktopSidebarCollapsed(false)}
+            onShowSidebar={handleShowSidebar}
           />
         ) : (
           <StockDetail
@@ -292,8 +292,7 @@ export default function App() {
             quote={quotes.get(detailCode)}
             theme={theme}
             onToggleTheme={toggleTheme}
-            sidebarCollapsed={desktopSidebarCollapsed}
-            onShowSidebar={() => setDesktopSidebarCollapsed(false)}
+            onShowSidebar={handleShowSidebar}
           />
         )
       ) : (

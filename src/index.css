@@ -189,7 +189,7 @@ body {
   flex: none;
   width: 28px;
   height: 28px;
-  display: inline-grid;
+  display: none;
   place-items: center;
   border: 1px solid var(--border);
   border-radius: 999px;
@@ -203,6 +203,10 @@ body {
 
 .app.desktop-sidebar-collapsed .sidebar-shell {
   display: none;
+}
+
+.app.desktop-sidebar-collapsed .detail-sidebar-restore {
+  display: inline-grid;
 }
 
 /* ========== 左侧：自选 ========== */
@@ -650,36 +654,12 @@ body {
     position: relative;
   }
 
-  .detail-sidebar-restore,
   .sidebar-collapse-button {
     display: none;
   }
 
-  .mobile-watchlist-toggle {
-    position: fixed;
-    top: max(10px, env(safe-area-inset-top));
-    left: 10px;
-    z-index: 40;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 56px;
-    height: 34px;
-    padding: 0 12px;
-    border: 1px solid var(--border);
-    border-radius: 999px;
-    background: color-mix(in srgb, var(--surface) 88%, transparent);
-    color: var(--text);
-    box-shadow: 0 10px 28px var(--dropdown-shadow);
-    font-size: 14px;
-    font-weight: 700;
-    cursor: pointer;
-    backdrop-filter: blur(12px);
-  }
-
-  .app.mobile-sidebar-open .mobile-watchlist-toggle {
-    opacity: 0;
-    pointer-events: none;
+  .detail-sidebar-restore {
+    display: inline-grid;
   }
 
   .mobile-sidebar-backdrop {
@@ -791,8 +771,7 @@ body {
     width: 100%;
     height: 100dvh;
     min-height: 0;
-    padding: calc(max(10px, env(safe-area-inset-top)) + 46px) 10px
-      max(10px, env(safe-area-inset-bottom));
+    padding: max(10px, env(safe-area-inset-top)) 10px max(10px, env(safe-area-inset-bottom));
   }
 
   .theme-toggle {
@@ -803,11 +782,11 @@ body {
   }
 
   .detail-header {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    display: flex;
+    flex-wrap: wrap;
     gap: 4px 8px;
     align-items: center;
-    padding-right: 0;
+    padding-right: 42px;
   }
 
   .detail-name {
@@ -819,11 +798,12 @@ body {
   }
 
   .detail-code {
+    margin-left: auto;
     font-size: 12px;
   }
 
   .detail-time {
-    grid-column: 1 / -1;
+    flex-basis: 100%;
     margin-left: 0;
     font-size: 11px;
   }

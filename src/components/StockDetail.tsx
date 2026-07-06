@@ -33,7 +33,6 @@ interface Props {
   quote: AppQuote | undefined;
   theme: Theme;
   onToggleTheme: () => void;
-  sidebarCollapsed?: boolean;
   onShowSidebar?: () => void;
 }
 
@@ -42,7 +41,6 @@ export default function StockDetail({
   quote,
   theme,
   onToggleTheme,
-  sidebarCollapsed = false,
   onShowSidebar,
 }: Props) {
   const [tab, setTab] = useState<ChartTab>('timeline');
@@ -141,7 +139,7 @@ export default function StockDetail({
         <div className="detail-main-quote">
           <div className="detail-header">
             <span className="detail-name">{quote?.name || code}</span>
-            {sidebarCollapsed && onShowSidebar && (
+            {onShowSidebar && (
               <button
                 type="button"
                 className="detail-sidebar-restore"

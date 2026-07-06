@@ -29,7 +29,6 @@ interface Props {
   quote: MetalQuote | undefined;
   theme: Theme;
   onToggleTheme: () => void;
-  sidebarCollapsed?: boolean;
   onShowSidebar?: () => void;
 }
 
@@ -39,7 +38,6 @@ export default function MetalDetail({
   quote,
   theme,
   onToggleTheme,
-  sidebarCollapsed = false,
   onShowSidebar,
 }: Props) {
   const [tab, setTab] = useState<ChartTab>('daily');
@@ -95,7 +93,7 @@ export default function MetalDetail({
         <div className="detail-main-quote">
           <div className="detail-header">
             <span className="detail-name">{displayName}</span>
-            {sidebarCollapsed && onShowSidebar && (
+            {onShowSidebar && (
               <button
                 type="button"
                 className="detail-sidebar-restore"
