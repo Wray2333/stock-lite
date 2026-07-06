@@ -48,13 +48,26 @@ export default function StockDetail({
   const [kline, setKline] = useState<AppKline[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [chartFullscreen, setChartFullscreen] = useState(false);
 
   // 切换股票时重置图表数据
   useEffect(() => {
     setTimeline(null);
     setKline(null);
     setError('');
+    setChartFullscreen(false);
   }, [code]);
+
+  useEffect(() => {
+    if (!chartFullscreen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setChartFullscreen(false);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [chartFullscreen]);
 
   // 分时：加载 + 轮询
   useEffect(() => {
@@ -177,7 +190,7 @@ export default function StockDetail({
         </div>
       </div>
 
-      <div className="chart-card">
+      <div className={`chart-card${chartFullscreen ? ' chart-fullscreen' : ''}`}>
         <div className="chart-tabs">
           {TABS.map((t) => (
             <button
@@ -188,6 +201,15 @@ export default function StockDetail({
               {t.label}
             </button>
           ))}
+          <button
+            type="button"
+            className="chart-fullscreen-button"
+            aria-label={chartFullscreen ? '退出全屏' : '全屏查看图表'}
+            title={chartFullscreen ? '退出全屏' : '全屏查看图表'}
+            onClick={() => setChartFullscreen((current) => !current)}
+          >
+            {chartFullscreen ? '×' : '⛶'}
+          </button>
         </div>
         <div className="chart-body">
           {option && <EChart option={option} />}

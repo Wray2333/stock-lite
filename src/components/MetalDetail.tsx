@@ -44,6 +44,22 @@ export default function MetalDetail({
   const [kline, setKline] = useState<AppKline[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [chartFullscreen, setChartFullscreen] = useState(false);
+
+  useEffect(() => {
+    setChartFullscreen(false);
+  }, [code]);
+
+  useEffect(() => {
+    if (!chartFullscreen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setChartFullscreen(false);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [chartFullscreen]);
 
   // K 线：按周期加载
   useEffect(() => {
@@ -128,7 +144,7 @@ export default function MetalDetail({
         </div>
       </div>
 
-      <div className="chart-card">
+      <div className={`chart-card${chartFullscreen ? ' chart-fullscreen' : ''}`}>
         <div className="chart-tabs">
           {TABS.map((t) => (
             <button
@@ -139,6 +155,15 @@ export default function MetalDetail({
               {t.label}
             </button>
           ))}
+          <button
+            type="button"
+            className="chart-fullscreen-button"
+            aria-label={chartFullscreen ? '退出全屏' : '全屏查看图表'}
+            title={chartFullscreen ? '退出全屏' : '全屏查看图表'}
+            onClick={() => setChartFullscreen((current) => !current)}
+          >
+            {chartFullscreen ? '×' : '⛶'}
+          </button>
         </div>
         <div className="chart-body">
           {option && <EChart option={option} />}
