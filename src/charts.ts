@@ -322,7 +322,11 @@ function calcMA(closes: (number | null)[], period: number): (number | null)[] {
 }
 
 /** K 线图：蜡烛 + MA5/10/20 + 成交量 */
-export function buildKlineOption(klines: AppKline[], theme: Theme): EChartsOption {
+export function buildKlineOption(
+  klines: AppKline[],
+  theme: Theme,
+  startPercent = 0
+): EChartsOption {
   const COLOR = chartColors(theme);
   const axis = axisCommon(COLOR);
   const tooltip = tooltipCommon(COLOR);
@@ -348,8 +352,6 @@ export function buildKlineOption(klines: AppKline[], theme: Theme): EChartsOptio
     itemStyle: { color: ['#9085e9', '#c98500', '#3987e5'][i] },
     emphasis: { disabled: true },
   }));
-
-  const startPercent = Math.max(0, 100 - (120 / Math.max(klines.length, 1)) * 100);
 
   return {
     animation: false,

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { EChartsOption } from 'echarts';
 import EChart from './EChart';
+import StatsPanel, { type DetailStat } from './StatsPanel';
 import ThemeToggle from './ThemeToggle';
 import { fetchKline, fetchTimeline, type AppQuote, type TimelineData } from '../sdk';
 import { buildKlineOption, buildTimelineOption, type AppKline } from '../charts';
@@ -27,6 +28,10 @@ const TABS: { key: ChartTab; label: string }[] = [
 ];
 
 const TIMELINE_REFRESH_MS = 15000;
+const DEFAULT_KLINE_YEARS = 5;
+const KLINE_LOAD_STEP_YEARS = 5;
+const KLINE_MAX_YEARS = 30;
+const KLINE_INITIAL_START_PERCENT = 2;
 
 interface Props {
   code: string;
@@ -49,6 +54,8 @@ export default function StockDetail({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [chartFullscreen, setChartFullscreen] = useState(false);
+  const [klineYears, setKlineYears] = useState(DEFAULT_KLINE_YEARS);
+  const [klineStartPercent, setKlineStartPercent] = useState(KLINE_INITIAL_START_PERCENT);
 
   // 切换股票时重置图表数据
   useEffect(() => {
@@ -56,7 +63,15 @@ export default function StockDetail({
     setKline(null);
     setError('');
     setChartFullscreen(false);
+    setKlineYears(DEFAULT_KLINE_YEARS);
+    setKlineStartPercent(KLINE_INITIAL_START_PERCENT);
   }, [code]);
+
+  useEffect(() => {
+    setKline(null);
+    setKlineYears(DEFAULT_KLINE_YEARS);
+    setKlineStartPercent(KLINE_INITIAL_START_PERCENT);
+  }, [code, tab]);
 
   useEffect(() => {
     if (!chartFullscreen) return;
@@ -101,7 +116,7 @@ export default function StockDetail({
     let cancelled = false;
     setLoading(true);
     setKline(null);
-    fetchKline(code, tab)
+    fetchKline(code, tab, klineYears)
       .then((data) => {
         if (!cancelled) {
           setKline(data);
@@ -117,19 +132,31 @@ export default function StockDetail({
     return () => {
       cancelled = true;
     };
-  }, [code, tab]);
+  }, [code, tab, klineYears]);
 
   const option: EChartsOption | null = useMemo(() => {
     if (tab === 'timeline') {
       return timeline && timeline.data.length > 0 ? buildTimelineOption(timeline, theme) : null;
     }
-    return kline && kline.length > 0 ? buildKlineOption(kline, theme) : null;
-  }, [tab, timeline, kline, theme]);
+    return kline && kline.length > 0
+      ? buildKlineOption(kline, theme, klineStartPercent)
+      : null;
+  }, [tab, timeline, kline, theme, klineStartPercent]);
+
+  const handleKlineDataZoom = ({ start }: { start: number; end: number }) => {
+    if (tab === 'timeline' || loading || start > 2) return;
+    setKlineYears((current) =>
+      current >= KLINE_MAX_YEARS
+        ? current
+        : Math.min(KLINE_MAX_YEARS, current + KLINE_LOAD_STEP_YEARS)
+    );
+    setKlineStartPercent(0);
+  };
 
   const cls = trendClass(quote?.changePercent);
   const market = quote?.market ?? (code.startsWith('us') ? 'US' : 'A');
 
-  const stats: { label: string; full: string; value: string; cls?: string }[] = [
+  const stats: DetailStat[] = [
     { label: '今开', full: '今开', value: fmtPrice(quote?.open), cls: trendClass(quote && quote.prevClose ? quote.open - quote.prevClose : null) },
     { label: '昨收', full: '昨收', value: fmtPrice(quote?.prevClose) },
     { label: '最高', full: '最高', value: fmtPrice(quote?.high), cls: trendClass(quote && quote.prevClose ? quote.high - quote.prevClose : null) },
@@ -180,14 +207,7 @@ export default function StockDetail({
           </div>
         </div>
 
-        <div className="stats-grid">
-          {stats.map((s) => (
-            <div key={s.full} className="stat-cell" title={s.full}>
-              <div className="stat-label">{s.label}</div>
-              <div className={`stat-value ${s.cls ?? ''}`}>{s.value}</div>
-            </div>
-          ))}
-        </div>
+        <StatsPanel stats={stats} />
       </div>
 
       <div className={`chart-card${chartFullscreen ? ' chart-fullscreen' : ''}`}>
@@ -212,7 +232,12 @@ export default function StockDetail({
           </button>
         </div>
         <div className="chart-body">
-          {option && <EChart option={option} />}
+          {option && (
+            <EChart
+              option={option}
+              onDataZoom={tab === 'timeline' ? undefined : handleKlineDataZoom}
+            />
+          )}
           {!option && loading && <div className="chart-loading">加载中…</div>}
           {!option && !loading && error && <div className="chart-error">{error}</div>}
           {!option && !loading && !error && (

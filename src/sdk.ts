@@ -243,6 +243,7 @@ export async function fetchTimeline(code: string): Promise<TimelineData> {
 const EASTMONEY_KLINE_URL = '/api/qt/stock/kline/get';
 const EASTMONEY_WEB_UT = 'fa5fd1943c7b386f172d6893dbfba10b';
 const EASTMONEY_CALLBACK_PREFIX = 'jQuery35105710896192148922';
+const KLINE_CACHE_VERSION = 4;
 const KLINE_CACHE_MS = 60000;
 const klineCache = new Map<string, { at: number; data: AppKline[] }>();
 const klineInflight = new Map<string, Promise<AppKline[]>>();
@@ -250,6 +251,23 @@ let klineJsonpSeq = 0;
 
 function eastmoneyKlt(period: 'daily' | 'weekly' | 'monthly'): string {
   return { daily: '101', weekly: '102', monthly: '103' }[period];
+}
+
+function eastmoneyDateParam(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}${month}${day}`;
+}
+
+function eastmoneyRecentRange(years: number): { beg: string; end: string } {
+  const end = new Date();
+  const beg = new Date(end);
+  beg.setFullYear(beg.getFullYear() - years);
+  return {
+    beg: eastmoneyDateParam(beg),
+    end: eastmoneyDateParam(end),
+  };
 }
 
 function eastmoneyAShareSecid(code: string): string {
@@ -297,13 +315,15 @@ async function requestEastmoneyKline(url: string): Promise<AppKline[]> {
   return parseEastmoneyKlineText(await res.text());
 }
 
-/** 东财网页端 K 线参数：走本地代理带 Cookie，使用完整历史区间 */
+/** 东财网页端 K 线参数：走本地代理带 Cookie，按需请求最近 N 年。 */
 async function fetchEastmoneyWebKline(
   secid: string,
   period: 'daily' | 'weekly' | 'monthly',
-  fqt: '0' | '1'
+  fqt: '0' | '1',
+  years: number
 ): Promise<AppKline[]> {
-  const cacheKey = `${secid}|${period}|${fqt}`;
+  const range = eastmoneyRecentRange(years);
+  const cacheKey = `${KLINE_CACHE_VERSION}|${secid}|${period}|${fqt}|${range.beg}|${range.end}`;
   const cached = klineCache.get(cacheKey);
   if (cached && Date.now() - cached.at < KLINE_CACHE_MS) {
     return cached.data;
@@ -321,9 +341,8 @@ async function fetchEastmoneyWebKline(
     fields2: 'f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61',
     klt: eastmoneyKlt(period),
     fqt,
-    beg: '0',
-    end: '20500101',
-    smplmt: '460',
+    beg: range.beg,
+    end: range.end,
     lmt: '1000000',
     _: String(now),
   });
@@ -341,12 +360,13 @@ async function fetchEastmoneyWebKline(
 
 export async function fetchKline(
   code: string,
-  period: 'daily' | 'weekly' | 'monthly'
+  period: 'daily' | 'weekly' | 'monthly',
+  years = 5
 ): Promise<AppKline[]> {
   if (isAShare(code)) {
-    return fetchEastmoneyWebKline(eastmoneyAShareSecid(code), period, '1');
+    return fetchEastmoneyWebKline(eastmoneyAShareSecid(code), period, '1', years);
   }
-  return fetchEastmoneyWebKline(tencentToEastmoney(code), period, '1');
+  return fetchEastmoneyWebKline(tencentToEastmoney(code), period, '1', years);
 }
 
 // ========== 实物金属：中国（上期所主连）+ 美国（COMEX/NYMEX） ==========
@@ -541,7 +561,8 @@ export async function fetchMetalQuotes(codes: string[]): Promise<Map<string, Met
 /** 金属历史 K 线（日/周/月）：使用东财网页端 JSONP，避免 SDK push2his 多域名重试 */
 export async function fetchMetalKline(
   code: string,
-  period: 'daily' | 'weekly' | 'monthly'
+  period: 'daily' | 'weekly' | 'monthly',
+  years = 5
 ): Promise<AppKline[]> {
-  return fetchEastmoneyWebKline(eastmoneyMetalSecid(code), period, '0');
+  return fetchEastmoneyWebKline(eastmoneyMetalSecid(code), period, '0', years);
 }
