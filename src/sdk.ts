@@ -361,7 +361,7 @@ async function fetchEastmoneyWebKline(
 export async function fetchKline(
   code: string,
   period: 'daily' | 'weekly' | 'monthly',
-  years = 5
+  years = 2
 ): Promise<AppKline[]> {
   if (isAShare(code)) {
     return fetchEastmoneyWebKline(eastmoneyAShareSecid(code), period, '1', years);
@@ -562,7 +562,7 @@ export async function fetchMetalQuotes(codes: string[]): Promise<Map<string, Met
 export async function fetchMetalKline(
   code: string,
   period: 'daily' | 'weekly' | 'monthly',
-  years = 5
+  years = 2
 ): Promise<AppKline[]> {
   return fetchEastmoneyWebKline(eastmoneyMetalSecid(code), period, '0', years);
 }

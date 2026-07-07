@@ -28,8 +28,8 @@ const TABS: { key: ChartTab; label: string }[] = [
 ];
 
 const TIMELINE_REFRESH_MS = 15000;
-const DEFAULT_KLINE_YEARS = 5;
-const KLINE_LOAD_STEP_YEARS = 5;
+const DEFAULT_KLINE_YEARS = 2;
+const KLINE_LOAD_STEP_YEARS = 2;
 const KLINE_MAX_YEARS = 30;
 const KLINE_INITIAL_START_PERCENT = 2;
 
