@@ -28,10 +28,7 @@ const TABS: { key: ChartTab; label: string }[] = [
 ];
 
 const TIMELINE_REFRESH_MS = 15000;
-const DEFAULT_KLINE_YEARS = 2;
-const KLINE_LOAD_STEP_YEARS = 2;
-const KLINE_MAX_YEARS = 30;
-const KLINE_INITIAL_START_PERCENT = 2;
+const DEFAULT_VISIBLE_KLINE_YEARS = 2;
 
 interface Props {
   code: string;
@@ -54,8 +51,6 @@ export default function StockDetail({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [chartFullscreen, setChartFullscreen] = useState(false);
-  const [klineYears, setKlineYears] = useState(DEFAULT_KLINE_YEARS);
-  const [klineStartPercent, setKlineStartPercent] = useState(KLINE_INITIAL_START_PERCENT);
 
   // 切换股票时重置图表数据
   useEffect(() => {
@@ -63,14 +58,10 @@ export default function StockDetail({
     setKline(null);
     setError('');
     setChartFullscreen(false);
-    setKlineYears(DEFAULT_KLINE_YEARS);
-    setKlineStartPercent(KLINE_INITIAL_START_PERCENT);
   }, [code]);
 
   useEffect(() => {
     setKline(null);
-    setKlineYears(DEFAULT_KLINE_YEARS);
-    setKlineStartPercent(KLINE_INITIAL_START_PERCENT);
   }, [code, tab]);
 
   useEffect(() => {
@@ -116,7 +107,7 @@ export default function StockDetail({
     let cancelled = false;
     setLoading(true);
     setKline(null);
-    fetchKline(code, tab, klineYears)
+    fetchKline(code, tab)
       .then((data) => {
         if (!cancelled) {
           setKline(data);
@@ -132,26 +123,16 @@ export default function StockDetail({
     return () => {
       cancelled = true;
     };
-  }, [code, tab, klineYears]);
+  }, [code, tab]);
 
   const option: EChartsOption | null = useMemo(() => {
     if (tab === 'timeline') {
       return timeline && timeline.data.length > 0 ? buildTimelineOption(timeline, theme) : null;
     }
     return kline && kline.length > 0
-      ? buildKlineOption(kline, theme, klineStartPercent)
+      ? buildKlineOption(kline, theme, DEFAULT_VISIBLE_KLINE_YEARS)
       : null;
-  }, [tab, timeline, kline, theme, klineStartPercent]);
-
-  const handleKlineDataZoom = ({ start }: { start: number; end: number }) => {
-    if (tab === 'timeline' || loading || start > 2) return;
-    setKlineYears((current) =>
-      current >= KLINE_MAX_YEARS
-        ? current
-        : Math.min(KLINE_MAX_YEARS, current + KLINE_LOAD_STEP_YEARS)
-    );
-    setKlineStartPercent(0);
-  };
+  }, [tab, timeline, kline, theme]);
 
   const cls = trendClass(quote?.changePercent);
   const market = quote?.market ?? (code.startsWith('us') ? 'US' : 'A');
@@ -232,12 +213,7 @@ export default function StockDetail({
           </button>
         </div>
         <div className="chart-body">
-          {option && (
-            <EChart
-              option={option}
-              onDataZoom={tab === 'timeline' ? undefined : handleKlineDataZoom}
-            />
-          )}
+          {option && <EChart option={option} />}
           {!option && loading && <div className="chart-loading">加载中…</div>}
           {!option && !loading && error && <div className="chart-error">{error}</div>}
           {!option && !loading && !error && (

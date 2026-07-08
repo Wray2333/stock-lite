@@ -3,8 +3,8 @@ import type { EChartsOption } from 'echarts';
 import EChart from './EChart';
 import StatsPanel, { type DetailStat } from './StatsPanel';
 import ThemeToggle from './ThemeToggle';
-import { fetchMetalKline, type MetalQuote } from '../sdk';
-import { buildKlineOption, type AppKline } from '../charts';
+import { fetchMetalKline, fetchMetalTimeline, type MetalQuote, type TimelineData } from '../sdk';
+import { buildKlineOption, buildTimelineOption, type AppKline } from '../charts';
 import type { Theme } from '../theme';
 import {
   fmtChange,
@@ -15,17 +15,16 @@ import {
   trendClass,
 } from '../format';
 
-type ChartTab = 'daily' | 'weekly' | 'monthly';
+type ChartTab = 'timeline' | 'daily' | 'weekly' | 'monthly';
 
 const TABS: { key: ChartTab; label: string }[] = [
+  { key: 'timeline', label: '分时' },
   { key: 'daily', label: '日K' },
   { key: 'weekly', label: '周K' },
   { key: 'monthly', label: '月K' },
 ];
-const DEFAULT_KLINE_YEARS = 2;
-const KLINE_LOAD_STEP_YEARS = 2;
-const KLINE_MAX_YEARS = 30;
-const KLINE_INITIAL_START_PERCENT = 2;
+const DEFAULT_VISIBLE_KLINE_YEARS = 2;
+const TIMELINE_REFRESH_MS = 15000;
 
 interface Props {
   code: string;
@@ -45,24 +44,23 @@ export default function MetalDetail({
   onToggleTheme,
   onShowSidebar,
 }: Props) {
-  const [tab, setTab] = useState<ChartTab>('daily');
+  const [tab, setTab] = useState<ChartTab>('timeline');
+  const [timeline, setTimeline] = useState<TimelineData | null>(null);
   const [kline, setKline] = useState<AppKline[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [chartFullscreen, setChartFullscreen] = useState(false);
-  const [klineYears, setKlineYears] = useState(DEFAULT_KLINE_YEARS);
-  const [klineStartPercent, setKlineStartPercent] = useState(KLINE_INITIAL_START_PERCENT);
 
   useEffect(() => {
+    setTimeline(null);
+    setKline(null);
+    setError('');
     setChartFullscreen(false);
-    setKlineYears(DEFAULT_KLINE_YEARS);
-    setKlineStartPercent(KLINE_INITIAL_START_PERCENT);
   }, [code]);
 
   useEffect(() => {
     setKline(null);
-    setKlineYears(DEFAULT_KLINE_YEARS);
-    setKlineStartPercent(KLINE_INITIAL_START_PERCENT);
+    setError('');
   }, [code, tab]);
 
   useEffect(() => {
@@ -76,13 +74,40 @@ export default function MetalDetail({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [chartFullscreen]);
 
+  // 分时：加载 + 轮询
+  useEffect(() => {
+    if (tab !== 'timeline') return;
+    let cancelled = false;
+    const load = async (silent: boolean) => {
+      if (!silent) setLoading(true);
+      try {
+        const res = await fetchMetalTimeline(code);
+        if (!cancelled) {
+          setTimeline(res);
+          setError('');
+        }
+      } catch {
+        if (!cancelled && !silent) setError('分时数据加载失败');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    load(false);
+    const timer = setInterval(() => load(true), TIMELINE_REFRESH_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [code, tab]);
+
   // K 线：按周期加载
   useEffect(() => {
+    if (tab === 'timeline') return;
     let cancelled = false;
     setLoading(true);
     setKline(null);
     setError('');
-    fetchMetalKline(code, tab, klineYears)
+    fetchMetalKline(code, tab)
       .then((data) => {
         if (!cancelled) setKline(data);
       })
@@ -95,22 +120,16 @@ export default function MetalDetail({
     return () => {
       cancelled = true;
     };
-  }, [code, tab, klineYears]);
+  }, [code, tab]);
 
-  const option: EChartsOption | null = useMemo(
-    () => (kline && kline.length > 0 ? buildKlineOption(kline, theme, klineStartPercent) : null),
-    [kline, theme, klineStartPercent]
-  );
-
-  const handleKlineDataZoom = ({ start }: { start: number; end: number }) => {
-    if (loading || start > 2) return;
-    setKlineYears((current) =>
-      current >= KLINE_MAX_YEARS
-        ? current
-        : Math.min(KLINE_MAX_YEARS, current + KLINE_LOAD_STEP_YEARS)
-    );
-    setKlineStartPercent(0);
-  };
+  const option: EChartsOption | null = useMemo(() => {
+    if (tab === 'timeline') {
+      return timeline && timeline.data.length > 0 ? buildTimelineOption(timeline, theme) : null;
+    }
+    return kline && kline.length > 0
+      ? buildKlineOption(kline, theme, DEFAULT_VISIBLE_KLINE_YEARS)
+      : null;
+  }, [tab, timeline, kline, theme]);
 
   const cls = trendClass(quote?.changePercent);
   const displayName = quote?.name || name || code;
@@ -184,7 +203,7 @@ export default function MetalDetail({
           </button>
         </div>
         <div className="chart-body">
-          {option && <EChart option={option} onDataZoom={handleKlineDataZoom} />}
+          {option && <EChart option={option} />}
           {!option && loading && <div className="chart-loading">加载中…</div>}
           {!option && !loading && error && <div className="chart-error">{error}</div>}
           {!option && !loading && !error && (

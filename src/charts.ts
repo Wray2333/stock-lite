@@ -110,10 +110,13 @@ export function buildTimelineOption(timeline: TimelineData, theme: Theme): EChar
   const axis = axisCommon(COLOR);
   const tooltip = tooltipCommon(COLOR);
   const isUS = timeline.market === 'US';
+  const isFutures = timeline.market === 'FUTURES';
   // A股：盘后固定价格交易（15:00 之后）数据源返回了才追加刻度
   const baseTimes = isUS ? fullTradingMinutesUS() : fullTradingMinutesA();
-  const afterHours = isUS ? [] : timeline.data.map((p) => p.time).filter((t) => t > '15:00');
-  const times = [...baseTimes, ...afterHours];
+  const afterHours = isUS || isFutures
+    ? []
+    : timeline.data.map((p) => p.time).filter((t) => t > '15:00');
+  const times = isFutures ? timeline.data.map((p) => p.time) : [...baseTimes, ...afterHours];
   const byTime = new Map(timeline.data.map((p) => [p.time, p]));
   const prevClose = timeline.preClose;
 
@@ -129,7 +132,9 @@ export function buildTimelineOption(timeline: TimelineData, theme: Theme): EChar
   const yMin = prevClose - maxDiff * 1.1;
   const yMax = prevClose + maxDiff * 1.1;
 
-  const tickTimes = isUS
+  const tickTimes = isFutures
+    ? []
+    : isUS
     ? ['09:30', '11:00', '12:30', '14:00', '16:00']
     : ['09:30', '10:30', '11:30', '14:00', '15:00'];
   if (afterHours.length > 0) tickTimes.push(afterHours[afterHours.length - 1]);
@@ -171,7 +176,12 @@ export function buildTimelineOption(timeline: TimelineData, theme: Theme): EChar
       ...axis,
       axisLabel: {
         ...axis.axisLabel,
-        interval: (index: number) => tickTimes.includes(times[index]),
+        interval: isFutures
+          ? 'auto'
+          : (index: number) => tickTimes.includes(times[index]),
+        formatter: isFutures
+          ? (value: string) => value.slice(11, 16)
+          : undefined,
       },
       splitLine: { show: false },
     },
@@ -321,11 +331,34 @@ function calcMA(closes: (number | null)[], period: number): (number | null)[] {
   return out;
 }
 
+function parseKlineDate(value: string): number | null {
+  const time = new Date(`${value}T00:00:00`).getTime();
+  return Number.isFinite(time) ? time : null;
+}
+
+function defaultKlineStartPercent(klines: AppKline[], visibleYears: number): number {
+  if (klines.length <= 1) return 0;
+
+  const lastTime = parseKlineDate(klines[klines.length - 1].date);
+  if (lastTime == null) return 0;
+
+  const startDate = new Date(lastTime);
+  startDate.setFullYear(startDate.getFullYear() - visibleYears);
+  const startTime = startDate.getTime();
+  const index = klines.findIndex((k) => {
+    const time = parseKlineDate(k.date);
+    return time != null && time >= startTime;
+  });
+
+  const startIndex = index >= 0 ? index : 0;
+  return (startIndex / (klines.length - 1)) * 100;
+}
+
 /** K 线图：蜡烛 + MA5/10/20 + 成交量 */
 export function buildKlineOption(
   klines: AppKline[],
   theme: Theme,
-  startPercent = 0
+  visibleYears = 2
 ): EChartsOption {
   const COLOR = chartColors(theme);
   const axis = axisCommon(COLOR);
@@ -352,6 +385,7 @@ export function buildKlineOption(
     itemStyle: { color: ['#9085e9', '#c98500', '#3987e5'][i] },
     emphasis: { disabled: true },
   }));
+  const startPercent = defaultKlineStartPercent(klines, visibleYears);
 
   return {
     animation: false,

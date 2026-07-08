@@ -67,7 +67,7 @@ export default function Watchlist({
     setMetalResults(null);
   }, [activeTab]);
 
-  // 防抖搜索：股票 / 金属按当前 tab 分流
+  // 防抖搜索：股票 / 期货按当前 tab 分流
   useEffect(() => {
     const kw = keyword.trim();
     if (!kw) {
@@ -148,7 +148,7 @@ export default function Watchlist({
             className={`sidebar-tab${isMetalTab ? ' active' : ''}`}
             onClick={() => onTabChange('metal')}
           >
-            金属
+            期货
           </button>
         </div>
         <div className="search-box" ref={boxRef}>
@@ -157,7 +157,7 @@ export default function Watchlist({
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
             placeholder={
-              isMetalTab ? '搜索金属品种，如 黄金 / GC' : '搜索 A股 / 美股代码、名称、拼音'
+              isMetalTab ? '搜索期货品种，如 黄金 / GC' : '搜索 A股 / 美股代码、名称、拼音'
             }
           />
           {keyword.trim() && (
@@ -219,7 +219,7 @@ export default function Watchlist({
                 )
               ) : (
                 <div className="search-empty">
-                  {isMetalTab ? '未找到相关金属品种' : '未找到相关股票'}
+                  {isMetalTab ? '未找到相关期货品种' : '未找到相关股票'}
                 </div>
               )}
             </div>
@@ -231,9 +231,9 @@ export default function Watchlist({
         {isMetalTab ? (
           metals.length === 0 ? (
             <div className="watch-empty">
-              金属列表为空
+              期货列表为空
               <br />
-              使用上方搜索框添加品种
+              使用上方搜索框添加期货
             </div>
           ) : (
             metals.map((item) => {

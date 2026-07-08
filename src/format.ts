@@ -102,7 +102,7 @@ export function fmtPriceCur(v: number | null | undefined, symbol: string): strin
   return `${symbol}${v.toFixed(2)}`;
 }
 
-/** 金属交易所信息：按品种名推断（沪=上期所，其余为美国 COMEX/NYMEX） */
+/** 期货交易所信息：按品种名推断（沪=上期所，其余为美国 COMEX/NYMEX） */
 export function metalExchangeInfo(name: string): { label: string; full: string; symbol: string } {
   if (name.startsWith('沪')) return { label: '沪', full: '上海期货交易所 · 人民币', symbol: '¥' };
   if (name.includes('NYMEX')) return { label: 'NYMEX', full: '纽约商业交易所 · 美元', symbol: '$' };

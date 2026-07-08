@@ -8,6 +8,8 @@ import react from '@vitejs/plugin-react';
 
 const EASTMONEY_KLINE_PATH = '/api/qt/stock/kline/get';
 const EASTMONEY_KLINE_UPSTREAM = 'https://push2his.eastmoney.com/api/qt/stock/kline/get';
+const EASTMONEY_TRENDS_PATH = '/api/qt/stock/trends2/get';
+const EASTMONEY_TRENDS_UPSTREAM = 'https://push2.eastmoney.com/api/qt/stock/trends2/get';
 const EASTMONEY_COOKIE_FILE = 'eastmoney-cookie.txt';
 const DEFAULT_EASTMONEY_COOKIE = [
   'qgqp_b_id=0384d1d5165178cfad2a6b3f48537928',
@@ -245,8 +247,14 @@ function runCurl(url: string, cookie: string): Promise<string> {
   });
 }
 
-function registerEastmoneyKlineProxy(server: MiddlewareServer, eastmoneyCookie: string) {
-  server.middlewares.use(EASTMONEY_KLINE_PATH, async (req, res, next) => {
+function registerEastmoneyProxy(
+  server: MiddlewareServer,
+  localPath: string,
+  upstreamBase: string,
+  eastmoneyCookie: string,
+  label: string
+) {
+  server.middlewares.use(localPath, async (req, res, next) => {
     if (!req.url) {
       next();
       return;
@@ -257,7 +265,7 @@ function registerEastmoneyKlineProxy(server: MiddlewareServer, eastmoneyCookie: 
       return;
     }
 
-    const upstream = new URL(`${EASTMONEY_KLINE_UPSTREAM}${req.url}`);
+    const upstream = new URL(`${upstreamBase}${req.url}`);
     try {
       const response = await fetch(upstream, {
         headers: {
@@ -283,7 +291,7 @@ function registerEastmoneyKlineProxy(server: MiddlewareServer, eastmoneyCookie: 
       } catch (curlError) {
         res.statusCode = 502;
         res.end(
-          `Eastmoney K line proxy failed: ${
+          `Eastmoney ${label} proxy failed: ${
             curlError instanceof Error ? curlError.message : String(curlError)
           }; fetch fallback reason: ${
             fetchError instanceof Error ? fetchError.message : String(fetchError)
@@ -294,14 +302,40 @@ function registerEastmoneyKlineProxy(server: MiddlewareServer, eastmoneyCookie: 
   });
 }
 
-function eastmoneyKlineProxy(eastmoneyCookie: string) {
+function eastmoneyDataProxy(eastmoneyCookie: string) {
   return {
-    name: 'eastmoney-kline-proxy',
+    name: 'eastmoney-data-proxy',
     configureServer(server: ViteDevServer) {
-      registerEastmoneyKlineProxy(server, eastmoneyCookie);
+      registerEastmoneyProxy(
+        server,
+        EASTMONEY_KLINE_PATH,
+        EASTMONEY_KLINE_UPSTREAM,
+        eastmoneyCookie,
+        'K line'
+      );
+      registerEastmoneyProxy(
+        server,
+        EASTMONEY_TRENDS_PATH,
+        EASTMONEY_TRENDS_UPSTREAM,
+        eastmoneyCookie,
+        'trends'
+      );
     },
     configurePreviewServer(server: PreviewServer) {
-      registerEastmoneyKlineProxy(server, eastmoneyCookie);
+      registerEastmoneyProxy(
+        server,
+        EASTMONEY_KLINE_PATH,
+        EASTMONEY_KLINE_UPSTREAM,
+        eastmoneyCookie,
+        'K line'
+      );
+      registerEastmoneyProxy(
+        server,
+        EASTMONEY_TRENDS_PATH,
+        EASTMONEY_TRENDS_UPSTREAM,
+        eastmoneyCookie,
+        'trends'
+      );
     },
   };
 }
@@ -312,7 +346,7 @@ export default defineConfig(({ mode }) => {
     plugins: [
       react(),
       fileStoragePlugin(),
-      eastmoneyKlineProxy(loadEastmoneyCookie(env.EASTMONEY_COOKIE)),
+      eastmoneyDataProxy(loadEastmoneyCookie(env.EASTMONEY_COOKIE)),
     ],
     preview: {
       allowedHosts: ['stock.20020527.xyz'],

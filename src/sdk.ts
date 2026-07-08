@@ -41,7 +41,7 @@ export interface AppQuote {
 
 /** 统一分时数据结构 */
 export interface TimelineData {
-  market: 'A' | 'US';
+  market: 'A' | 'US' | 'FUTURES';
   preClose: number;
   data: { time: string; price: number; avgPrice: number | null }[];
 }
@@ -238,36 +238,22 @@ export async function fetchTimeline(code: string): Promise<TimelineData> {
   }
 }
 
-// ========== K 线：东财网页端 JSONP（A股 / 美股 / 金属） ==========
+// ========== K 线：东财网页端 JSONP（A股 / 美股 / 期货） ==========
 
 const EASTMONEY_KLINE_URL = '/api/qt/stock/kline/get';
+const EASTMONEY_TRENDS_URL = '/api/qt/stock/trends2/get';
 const EASTMONEY_WEB_UT = 'fa5fd1943c7b386f172d6893dbfba10b';
 const EASTMONEY_CALLBACK_PREFIX = 'jQuery35105710896192148922';
-const KLINE_CACHE_VERSION = 4;
+const EASTMONEY_TRENDS_CALLBACK_PREFIX = 'miniquotechart_jp';
+const KLINE_CACHE_VERSION = 5;
 const KLINE_CACHE_MS = 60000;
 const klineCache = new Map<string, { at: number; data: AppKline[] }>();
 const klineInflight = new Map<string, Promise<AppKline[]>>();
 let klineJsonpSeq = 0;
+let trendsJsonpSeq = 0;
 
 function eastmoneyKlt(period: 'daily' | 'weekly' | 'monthly'): string {
   return { daily: '101', weekly: '102', monthly: '103' }[period];
-}
-
-function eastmoneyDateParam(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}${month}${day}`;
-}
-
-function eastmoneyRecentRange(years: number): { beg: string; end: string } {
-  const end = new Date();
-  const beg = new Date(end);
-  beg.setFullYear(beg.getFullYear() - years);
-  return {
-    beg: eastmoneyDateParam(beg),
-    end: eastmoneyDateParam(end),
-  };
 }
 
 function eastmoneyAShareSecid(code: string): string {
@@ -309,21 +295,27 @@ function parseEastmoneyKlineText(text: string): AppKline[] {
   return parseEastmoneyKlinePayload(JSON.parse(jsonText) as EastmoneyKlinePayload);
 }
 
+function parseJsonpPayload<T>(text: string): T {
+  const trimmed = text.trim();
+  const start = trimmed.indexOf('(');
+  const end = trimmed.lastIndexOf(')');
+  const jsonText = start >= 0 && end > start ? trimmed.slice(start + 1, end) : trimmed;
+  return JSON.parse(jsonText) as T;
+}
+
 async function requestEastmoneyKline(url: string): Promise<AppKline[]> {
   const res = await fetch(url, { cache: 'no-store' });
   if (!res.ok) throw new Error(`Eastmoney K line HTTP ${res.status}`);
   return parseEastmoneyKlineText(await res.text());
 }
 
-/** 东财网页端 K 线参数：走本地代理带 Cookie，按需请求最近 N 年。 */
+/** 东财网页端 K 线参数：走本地代理带 Cookie，请求完整历史，图表默认视窗由 dataZoom 控制。 */
 async function fetchEastmoneyWebKline(
   secid: string,
   period: 'daily' | 'weekly' | 'monthly',
-  fqt: '0' | '1',
-  years: number
+  fqt: '0' | '1'
 ): Promise<AppKline[]> {
-  const range = eastmoneyRecentRange(years);
-  const cacheKey = `${KLINE_CACHE_VERSION}|${secid}|${period}|${fqt}|${range.beg}|${range.end}`;
+  const cacheKey = `${KLINE_CACHE_VERSION}|${secid}|${period}|${fqt}`;
   const cached = klineCache.get(cacheKey);
   if (cached && Date.now() - cached.at < KLINE_CACHE_MS) {
     return cached.data;
@@ -341,8 +333,8 @@ async function fetchEastmoneyWebKline(
     fields2: 'f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61',
     klt: eastmoneyKlt(period),
     fqt,
-    beg: range.beg,
-    end: range.end,
+    beg: '0',
+    end: '20500101',
     lmt: '1000000',
     _: String(now),
   });
@@ -360,18 +352,17 @@ async function fetchEastmoneyWebKline(
 
 export async function fetchKline(
   code: string,
-  period: 'daily' | 'weekly' | 'monthly',
-  years = 2
+  period: 'daily' | 'weekly' | 'monthly'
 ): Promise<AppKline[]> {
   if (isAShare(code)) {
-    return fetchEastmoneyWebKline(eastmoneyAShareSecid(code), period, '1', years);
+    return fetchEastmoneyWebKline(eastmoneyAShareSecid(code), period, '1');
   }
-  return fetchEastmoneyWebKline(tencentToEastmoney(code), period, '1', years);
+  return fetchEastmoneyWebKline(tencentToEastmoney(code), period, '1');
 }
 
-// ========== 实物金属：中国（上期所主连）+ 美国（COMEX/NYMEX） ==========
+// ========== 期货：中国（上期所主连）+ 美国（COMEX/NYMEX） ==========
 
-/** 金属统一行情（国内来自最新日K，美国来自全球期货实时接口） */
+/** 期货统一行情（国内来自最新日K，美国来自全球期货实时接口） */
 export interface MetalQuote {
   code: string;
   name: string;
@@ -395,7 +386,7 @@ export interface MetalSearchItem {
   market: 'CN' | 'US';
 }
 
-/** 固定品种表：只收录中美两地的实物金属 */
+/** 固定品种表：只收录当前关注的中美期货品种 */
 const METAL_CATALOG: (MetalSearchItem & { aliases: string[] })[] = [
   { code: 'AUM', name: '沪金主连', market: 'CN', aliases: ['黄金', 'gold', 'au'] },
   { code: 'AGM', name: '沪银主连', market: 'CN', aliases: ['白银', 'silver', 'ag'] },
@@ -422,12 +413,18 @@ function eastmoneyMetalSecid(code: string): string {
   return `${market}.${code}`;
 }
 
-/** 是否为已收录的金属代码（用于过滤历史遗留项） */
+function eastmoneyMetalTrendsSecid(code: string): string {
+  const secid = eastmoneyMetalSecid(code);
+  const [market, symbol] = secid.split('.');
+  return `${market}.${symbol.toLowerCase()}`;
+}
+
+/** 是否为已收录的期货代码（用于过滤历史遗留项） */
 export function isMetalCode(code: string): boolean {
   return METAL_BY_CODE.has(code);
 }
 
-/** 搜索金属：固定品种表内按名称/别名/代码匹配，无需请求网络 */
+/** 搜索期货：固定品种表内按名称/别名/代码匹配，无需请求网络 */
 export async function searchMetals(keyword: string): Promise<MetalSearchItem[]> {
   const kw = keyword.trim().toLowerCase();
   if (!kw) return [];
@@ -439,7 +436,7 @@ export async function searchMetals(keyword: string): Promise<MetalSearchItem[]> 
   ).map(({ code, name, market }) => ({ code, name, market }));
 }
 
-/** 美国金属：全球期货实时接口（全量列表，短缓存） */
+/** 美国期货：全球期货实时接口（全量列表，短缓存） */
 let usSpotCache: { at: number; list: GlobalFuturesQuote[] } | null = null;
 const US_SPOT_CACHE_MS = 10000;
 
@@ -472,7 +469,7 @@ function mapUSSpot(q: GlobalFuturesQuote): MetalQuote {
 }
 
 /**
- * 国内金属实时行情：SDK 未封装上期所实时列表，直接调用东财 futsseapi
+ * 国内期货实时行情：SDK 未封装上期所实时列表，直接调用东财 futsseapi
  * （与 getGlobalFuturesSpot 同源同 token，一次请求返回全部上期所合约）
  */
 interface FutsseItem {
@@ -534,7 +531,7 @@ async function fetchCNSpot(): Promise<Map<string, MetalQuote>> {
   return map;
 }
 
-/** 批量金属行情：按市场分流 */
+/** 批量期货行情：按市场分流 */
 export async function fetchMetalQuotes(codes: string[]): Promise<Map<string, MetalQuote>> {
   const map = new Map<string, MetalQuote>();
   if (codes.length === 0) return map;
@@ -558,11 +555,63 @@ export async function fetchMetalQuotes(codes: string[]): Promise<Map<string, Met
   return map;
 }
 
-/** 金属历史 K 线（日/周/月）：使用东财网页端 JSONP，避免 SDK push2his 多域名重试 */
+/** 期货历史 K 线（日/周/月）：使用东财网页端 JSONP，避免 SDK push2his 多域名重试 */
 export async function fetchMetalKline(
   code: string,
-  period: 'daily' | 'weekly' | 'monthly',
-  years = 2
+  period: 'daily' | 'weekly' | 'monthly'
 ): Promise<AppKline[]> {
-  return fetchEastmoneyWebKline(eastmoneyMetalSecid(code), period, '0', years);
+  return fetchEastmoneyWebKline(eastmoneyMetalSecid(code), period, '0');
+}
+
+interface EastmoneyTrendsPayload {
+  data?: {
+    prePrice?: number;
+    preSettlement?: number;
+    preClose?: number;
+    trends?: string[];
+  };
+}
+
+function parseEastmoneyTrendsText(text: string): TimelineData {
+  const payload = parseJsonpPayload<EastmoneyTrendsPayload>(text);
+  const data = payload.data;
+  const preClose = data?.prePrice ?? data?.preSettlement ?? data?.preClose ?? 0;
+  const points = (data?.trends ?? [])
+    .map((line) => {
+      const f = line.split(',');
+      const price = parseNullableNumber(f[2]);
+      if (price == null) return null;
+      const avgPrice = parseNullableNumber(f[5]);
+      return {
+        time: f[0],
+        price,
+        avgPrice: avgPrice != null && avgPrice > 0 ? avgPrice : null,
+      };
+    })
+    .filter((p): p is { time: string; price: number; avgPrice: number | null } => p != null);
+  return { market: 'FUTURES', preClose, data: points };
+}
+
+export async function fetchMetalTimeline(code: string): Promise<TimelineData> {
+  const now = Date.now();
+  const cb = `${EASTMONEY_TRENDS_CALLBACK_PREFIX}${trendsJsonpSeq++ % 10}`;
+  const params = new URLSearchParams({
+    fields1: 'f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13,f14,f17',
+    fields2: 'f51,f52,f53,f54,f55,f58',
+    dect: '1',
+    mpi: '1000',
+    ut: EASTMONEY_WEB_UT,
+    secid: eastmoneyMetalTrendsSecid(code),
+    ndays: '1',
+    iscr: '0',
+    iscca: '0',
+    wbp2u: '1849325530509956|0|1|0|web',
+    cb,
+    _: String(now),
+  });
+  const res = await fetch(`${EASTMONEY_TRENDS_URL}?${params.toString()}`, {
+    cache: 'no-store',
+  });
+  if (!res.ok) throw new Error(`Eastmoney trends HTTP ${res.status}`);
+  return parseEastmoneyTrendsText(await res.text());
 }

@@ -119,7 +119,7 @@ export default function App() {
     };
   }, [activeTab, watchlist, selected]);
 
-  // 金属行情轮询：全球期货接口是全量列表，刷新间隔放宽（仅金属 tab 激活时）
+  // 期货行情轮询：全球期货接口是全量列表，刷新间隔放宽（仅期货 tab 激活时）
   useEffect(() => {
     if (activeTab !== 'metal') return;
     const codes = [...new Set([...metals.map((m) => m.code), selectedMetal].filter(Boolean))] as string[];
@@ -302,7 +302,7 @@ export default function App() {
             <div className="big">📈</div>
             <div>
               {isMetalTab
-                ? '在左侧搜索并添加金属品种，点击查看详情'
+                ? '在左侧搜索并添加期货品种，点击查看详情'
                 : '在左侧搜索并添加自选股，点击查看详情'}
             </div>
           </div>
