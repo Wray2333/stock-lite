@@ -168,10 +168,11 @@ export default function Watchlist({
                 isMetalTab ? (
                   metalResults!.map((r) => {
                     const ex = metalExchangeInfo(r.name);
+                    const isAdded = metalCodes.has(r.code);
                     return (
                       <div
                         key={r.code}
-                        className="search-item"
+                        className={`search-item${isAdded ? ' is-added' : ''}`}
                         onClick={() => handlePickMetal(r)}
                       >
                         <span className="name">
@@ -180,10 +181,16 @@ export default function Watchlist({
                           </span>
                           {r.name}
                         </span>
-                        <span className="code">
-                          {r.code}
-                          {metalCodes.has(r.code) && (
-                            <span className="added">　已添加</span>
+                        <span className="search-item-meta">
+                          <span className="code">{r.code}</span>
+                          {isAdded && (
+                            <span
+                              className="search-added-status"
+                              aria-label="已添加"
+                              title="已添加"
+                            >
+                              ✓
+                            </span>
                           )}
                         </span>
                       </div>
@@ -192,10 +199,11 @@ export default function Watchlist({
                 ) : (
                   stockResults!.map((r) => {
                     const ex = exchangeInfo(r.code);
+                    const isAdded = watchedCodes.has(r.code);
                     return (
                       <div
                         key={r.code}
-                        className="search-item"
+                        className={`search-item${isAdded ? ' is-added' : ''}`}
                         onClick={() => handlePickStock(r)}
                       >
                         <span className="name">
@@ -207,10 +215,16 @@ export default function Watchlist({
                           </span>
                           {r.name}
                         </span>
-                        <span className="code">
-                          {fmtCode(r.code)}
-                          {watchedCodes.has(r.code) && (
-                            <span className="added">　已添加</span>
+                        <span className="search-item-meta">
+                          <span className="code">{fmtCode(r.code)}</span>
+                          {isAdded && (
+                            <span
+                              className="search-added-status"
+                              aria-label="已添加"
+                              title="已添加"
+                            >
+                              ✓
+                            </span>
                           )}
                         </span>
                       </div>
