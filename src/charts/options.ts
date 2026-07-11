@@ -327,29 +327,31 @@ function parseKlineDate(value: string): number | null {
   return Number.isFinite(time) ? time : null;
 }
 
-function calculateDefaultZoomStart(klines: KlineBar[], visibleYears: number): number {
-  if (klines.length <= 1) return 0;
+function calculateDefaultZoomStartValue(
+  klines: KlineBar[],
+  visibleMonths: number
+): string | undefined {
+  if (klines.length === 0) return undefined;
 
   const lastTime = parseKlineDate(klines[klines.length - 1].date);
-  if (lastTime == null) return 0;
+  if (lastTime == null) return klines[0].date;
 
   const startDate = new Date(lastTime);
-  startDate.setFullYear(startDate.getFullYear() - visibleYears);
+  startDate.setMonth(startDate.getMonth() - visibleMonths);
   const startTime = startDate.getTime();
   const index = klines.findIndex((k) => {
     const time = parseKlineDate(k.date);
     return time != null && time >= startTime;
   });
 
-  const startIndex = index >= 0 ? index : 0;
-  return (startIndex / (klines.length - 1)) * 100;
+  return klines[index >= 0 ? index : 0].date;
 }
 
 /** K 线图：蜡烛 + MA5/10/20 + 成交量 */
 export function createKlineChartOption(
   klines: KlineBar[],
   theme: Theme,
-  visibleYears = 2
+  visibleMonths = 24
 ): EChartsOption {
   const COLOR = chartColors(theme);
   const axis = axisCommon(COLOR);
@@ -376,7 +378,8 @@ export function createKlineChartOption(
     itemStyle: { color: ['#9085e9', '#c98500', '#3987e5'][i] },
     emphasis: { disabled: true },
   }));
-  const startPercent = calculateDefaultZoomStart(klines, visibleYears);
+  const zoomStartValue = calculateDefaultZoomStartValue(klines, visibleMonths);
+  const zoomEndValue = dates[dates.length - 1];
 
   return {
     animation: false,
@@ -466,15 +469,15 @@ export function createKlineChartOption(
       {
         type: 'inside',
         xAxisIndex: [0, 1],
-        start: startPercent,
-        end: 100,
+        startValue: zoomStartValue,
+        endValue: zoomEndValue,
         filterMode: 'filter',
       },
       {
         type: 'slider',
         xAxisIndex: [0, 1],
-        start: startPercent,
-        end: 100,
+        startValue: zoomStartValue,
+        endValue: zoomEndValue,
         filterMode: 'filter',
         bottom: 8,
         height: 18,

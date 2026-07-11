@@ -17,7 +17,11 @@ const CHART_TABS: { key: ChartTab; label: string }[] = [
 ];
 
 const TIMELINE_REFRESH_MS = 15_000;
-const DEFAULT_VISIBLE_KLINE_YEARS = 2;
+const DEFAULT_VISIBLE_MONTHS: Record<KlinePeriod, number> = {
+  daily: 6,
+  weekly: 12,
+  monthly: 24,
+};
 
 interface Props {
   code: string;
@@ -105,7 +109,7 @@ export default function PriceChart({ code, theme, loadTimeline, loadKline }: Pro
       return timeline?.data.length ? createTimelineChartOption(timeline, theme) : null;
     }
     return klines?.length
-      ? createKlineChartOption(klines, theme, DEFAULT_VISIBLE_KLINE_YEARS)
+      ? createKlineChartOption(klines, theme, DEFAULT_VISIBLE_MONTHS[activeTab])
       : null;
   }, [activeTab, klines, theme, timeline]);
 
@@ -133,7 +137,7 @@ export default function PriceChart({ code, theme, loadTimeline, loadKline }: Pro
         </button>
       </div>
       <div className="chart-body">
-        {option && <EChart option={option} />}
+        {option && <EChart key={`${code}-${activeTab}`} option={option} />}
         {!option && isLoading && <div className="chart-loading">加载中…</div>}
         {!option && !isLoading && errorMessage && (
           <div className="chart-error">{errorMessage}</div>

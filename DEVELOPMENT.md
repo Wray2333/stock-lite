@@ -69,7 +69,7 @@ npm run dev -- --host 127.0.0.1 --port 5174
 
 - `PriceChart` 管理页签、加载状态、15 秒分时轮询和全屏状态。
 - `charts/options.ts` 只负责把统一数据转换成 ECharts option，不发请求、不持有 React 状态。
-- K 线请求完整历史，图表通过 `dataZoom` 默认展示最近两年。
+- K 线请求完整历史，图表通过 `dataZoom` 默认展示日 K 半年、周 K 一年、月 K 两年。
 
 ## 5. 本地 API
 
