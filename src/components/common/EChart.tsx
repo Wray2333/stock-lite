@@ -12,12 +12,13 @@ export default function EChart({ option }: Props) {
   const chartRef = useRef<echarts.ECharts | null>(null);
 
   useEffect(() => {
-    const el = containerRef.current!;
-    const chart = echarts.init(el);
+    const container = containerRef.current;
+    if (!container) return;
+    const chart = echarts.init(container);
     chartRef.current = chart;
 
     const observer = new ResizeObserver(() => chart.resize());
-    observer.observe(el);
+    observer.observe(container);
 
     return () => {
       observer.disconnect();

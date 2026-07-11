@@ -1,20 +1,5 @@
-/**
- * ECharts option 构建：分时图 / K 线图（A股 + 美股）
- */
 import type { EChartsOption } from 'echarts';
-import type { TimelineData } from './sdk';
-import type { Theme } from './theme';
-
-/** K 线通用字段：A股 HistoryKline / 美股 USHistoryKline / 期货 FuturesKline 均满足 */
-export interface AppKline {
-  date: string;
-  open: number | null;
-  close: number | null;
-  high: number | null;
-  low: number | null;
-  volume: number | null;
-  changePercent: number | null;
-}
+import type { KlineBar, Theme, TimelineData } from '../types/market';
 
 const CHART_COLORS = {
   dark: {
@@ -105,7 +90,10 @@ function fullTradingMinutesUS(): string[] {
 }
 
 /** 分时图：价格线 + 均价线，昨收为基准；A股含盘后，美股 09:30-16:00 */
-export function buildTimelineOption(timeline: TimelineData, theme: Theme): EChartsOption {
+export function createTimelineChartOption(
+  timeline: TimelineData,
+  theme: Theme
+): EChartsOption {
   const COLOR = chartColors(theme);
   const axis = axisCommon(COLOR);
   const tooltip = tooltipCommon(COLOR);
@@ -309,7 +297,10 @@ export function buildTimelineOption(timeline: TimelineData, theme: Theme): EChar
   };
 }
 
-function calcMA(closes: (number | null)[], period: number): (number | null)[] {
+function calculateMovingAverage(
+  closes: (number | null)[],
+  period: number
+): (number | null)[] {
   const out: (number | null)[] = [];
   let sum = 0;
   let count = 0;
@@ -336,7 +327,7 @@ function parseKlineDate(value: string): number | null {
   return Number.isFinite(time) ? time : null;
 }
 
-function defaultKlineStartPercent(klines: AppKline[], visibleYears: number): number {
+function calculateDefaultZoomStart(klines: KlineBar[], visibleYears: number): number {
   if (klines.length <= 1) return 0;
 
   const lastTime = parseKlineDate(klines[klines.length - 1].date);
@@ -355,8 +346,8 @@ function defaultKlineStartPercent(klines: AppKline[], visibleYears: number): num
 }
 
 /** K 线图：蜡烛 + MA5/10/20 + 成交量 */
-export function buildKlineOption(
-  klines: AppKline[],
+export function createKlineChartOption(
+  klines: KlineBar[],
   theme: Theme,
   visibleYears = 2
 ): EChartsOption {
@@ -378,14 +369,14 @@ export function buildKlineOption(
   const maSeries = [5, 10, 20].map((period, i) => ({
     name: `MA${period}`,
     type: 'line' as const,
-    data: calcMA(closes, period),
+    data: calculateMovingAverage(closes, period),
     showSymbol: false,
     connectNulls: true,
     lineStyle: { width: 1, color: ['#9085e9', '#c98500', '#3987e5'][i] },
     itemStyle: { color: ['#9085e9', '#c98500', '#3987e5'][i] },
     emphasis: { disabled: true },
   }));
-  const startPercent = defaultKlineStartPercent(klines, visibleYears);
+  const startPercent = calculateDefaultZoomStart(klines, visibleYears);
 
   return {
     animation: false,

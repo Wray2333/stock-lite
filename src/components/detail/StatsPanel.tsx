@@ -53,10 +53,10 @@ export default function StatsPanel({ stats }: Props) {
   return (
     <div className="stats-panel" ref={panelRef}>
       <div className="stats-grid">
-        {primaryStats.map((s) => (
-          <div key={s.full} className="stat-cell" title={s.full}>
-            <div className="stat-label">{s.label}</div>
-            <div className={`stat-value ${s.cls ?? ''}`}>{s.value}</div>
+        {primaryStats.map((stat) => (
+          <div key={stat.full} className="stat-cell" title={stat.full}>
+            <div className="stat-label">{stat.label}</div>
+            <div className={`stat-value ${stat.cls ?? ''}`}>{stat.value}</div>
           </div>
         ))}
       </div>
@@ -84,10 +84,14 @@ export default function StatsPanel({ stats }: Props) {
           </button>
           {expanded && (
             <div className="stats-popover">
-              {secondaryStats.map((s) => (
-                <div key={s.full} className="stat-cell stat-cell-secondary" title={s.full}>
-                  <div className="stat-label">{s.full}</div>
-                  <div className={`stat-value ${s.cls ?? ''}`}>{s.value}</div>
+              {secondaryStats.map((stat) => (
+                <div
+                  key={stat.full}
+                  className="stat-cell stat-cell-secondary"
+                  title={stat.full}
+                >
+                  <div className="stat-label">{stat.full}</div>
+                  <div className={`stat-value ${stat.cls ?? ''}`}>{stat.value}</div>
                 </div>
               ))}
             </div>

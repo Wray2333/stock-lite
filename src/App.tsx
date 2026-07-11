@@ -1,34 +1,32 @@
 import { useCallback, useEffect, useLayoutEffect, useState } from 'react';
-import Watchlist, { type SidebarTab } from './components/Watchlist';
-import StockDetail from './components/StockDetail';
-import MetalDetail from './components/MetalDetail';
-import ThemeToggle from './components/ThemeToggle';
+import Watchlist, { type SidebarTab } from './components/sidebar/Watchlist';
+import StockDetail from './components/detail/StockDetail';
+import FuturesDetail from './components/detail/FuturesDetail';
+import ThemeToggle from './components/common/ThemeToggle';
 import {
-  fetchMetalQuotes,
-  fetchQuotes,
-  isMetalCode,
-  type AppQuote,
-  type MetalQuote,
-} from './sdk';
+  fetchFuturesQuotes,
+  fetchSecurityQuotes,
+  isSupportedFuturesCode,
+} from './services/marketData';
 import {
-  DEFAULT_METALS,
+  DEFAULT_FUTURES,
   DEFAULT_WATCHLIST,
-  loadStorage,
-  saveMetals,
+  loadAppStorage,
+  saveFuturesList,
   saveTheme,
   saveWatchlist,
   type WatchItem,
-} from './storage';
-import type { Theme } from './theme';
+} from './services/storage';
+import type { FuturesQuote, SecurityQuote, Theme } from './types/market';
 
 const QUOTE_REFRESH_MS = 5000;
-const METAL_REFRESH_MS = 15000;
+const FUTURES_REFRESH_MS = 15000;
 function getSystemTheme(): Theme {
   if (typeof window === 'undefined') return 'dark';
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 }
 
-function loadTheme(): Theme {
+function initializeThemeFromSystem(): Theme {
   if (typeof window === 'undefined') return 'dark';
   const theme = getSystemTheme();
   document.documentElement.dataset.theme = theme;
@@ -43,65 +41,67 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<SidebarTab>('stock');
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [desktopSidebarCollapsed, setDesktopSidebarCollapsed] = useState(false);
-  const [theme, setTheme] = useState<Theme>(() => loadTheme());
+  const [theme, setTheme] = useState<Theme>(() => initializeThemeFromSystem());
 
   const [watchlist, setWatchlist] = useState<WatchItem[]>(DEFAULT_WATCHLIST);
-  const [selected, setSelected] = useState<string | null>(
+  const [selectedStock, setSelectedStock] = useState<string | null>(
     () => DEFAULT_WATCHLIST[0]?.code ?? null
   );
-  const [quotes, setQuotes] = useState<Map<string, AppQuote>>(new Map());
+  const [stockQuotes, setStockQuotes] = useState<Map<string, SecurityQuote>>(new Map());
 
-  const [metals, setMetals] = useState<WatchItem[]>(() =>
-    DEFAULT_METALS.filter((m) => isMetalCode(m.code))
+  const [futures, setFutures] = useState<WatchItem[]>(() =>
+    DEFAULT_FUTURES.filter((item) => isSupportedFuturesCode(item.code))
   );
-  const [selectedMetal, setSelectedMetal] = useState<string | null>(
-    () => DEFAULT_METALS.filter((m) => isMetalCode(m.code))[0]?.code ?? null
+  const [selectedFutures, setSelectedFutures] = useState<string | null>(
+    () => DEFAULT_FUTURES.find((item) => isSupportedFuturesCode(item.code))?.code ?? null
   );
-  const [metalQuotes, setMetalQuotes] = useState<Map<string, MetalQuote>>(new Map());
+  const [futuresQuotes, setFuturesQuotes] = useState<Map<string, FuturesQuote>>(new Map());
 
   useEffect(() => {
-    let cancelled = false;
-    loadStorage()
+    let isCancelled = false;
+    loadAppStorage()
       .then((data) => {
-        if (cancelled) return;
-        const fileMetals = data.metals.filter((m) => isMetalCode(m.code));
+        if (isCancelled) return;
+        const storedFutures = data.metals.filter((item) => isSupportedFuturesCode(item.code));
         setWatchlist(data.watchlist);
         if (data.theme) {
           applyTheme(data.theme);
           setTheme(data.theme);
         }
-        setSelected((current) =>
+        setSelectedStock((current) =>
           current && data.watchlist.some((w) => w.code === current)
             ? current
             : data.watchlist[0]?.code ?? null
         );
-        setMetals(fileMetals);
-        setSelectedMetal((current) =>
-          current && fileMetals.some((m) => m.code === current)
+        setFutures(storedFutures);
+        setSelectedFutures((current) =>
+          current && storedFutures.some((item) => item.code === current)
             ? current
-            : fileMetals[0]?.code ?? null
+            : storedFutures[0]?.code ?? null
         );
       })
       .catch(() => {
         // 文件存储不可用时保留默认列表，避免页面空白。
       });
     return () => {
-      cancelled = true;
+      isCancelled = true;
     };
   }, []);
 
   // 股票行情轮询：自选列表 + 当前选中（仅自选 tab 激活时）
   useEffect(() => {
     if (activeTab !== 'stock') return;
-    const codes = [...new Set([...watchlist.map((w) => w.code), selected].filter(Boolean))] as string[];
+    const codes = [
+      ...new Set([...watchlist.map((item) => item.code), selectedStock].filter(Boolean)),
+    ] as string[];
     if (codes.length === 0) return;
 
-    let cancelled = false;
-    const load = async () => {
+    let isCancelled = false;
+    const refreshSecurityQuotes = async () => {
       try {
-        const map = await fetchQuotes(codes);
-        if (!cancelled && map.size > 0) {
-          setQuotes((prev) => {
+        const map = await fetchSecurityQuotes(codes);
+        if (!isCancelled && map.size > 0) {
+          setStockQuotes((prev) => {
             const next = new Map(prev);
             for (const [k, v] of map) next.set(k, v);
             return next;
@@ -111,26 +111,28 @@ export default function App() {
         // 行情拉取失败时保留上一次数据，等待下轮刷新
       }
     };
-    load();
-    const timer = setInterval(load, QUOTE_REFRESH_MS);
+    void refreshSecurityQuotes();
+    const timer = setInterval(refreshSecurityQuotes, QUOTE_REFRESH_MS);
     return () => {
-      cancelled = true;
+      isCancelled = true;
       clearInterval(timer);
     };
-  }, [activeTab, watchlist, selected]);
+  }, [activeTab, watchlist, selectedStock]);
 
   // 期货行情轮询：全球期货接口是全量列表，刷新间隔放宽（仅期货 tab 激活时）
   useEffect(() => {
-    if (activeTab !== 'metal') return;
-    const codes = [...new Set([...metals.map((m) => m.code), selectedMetal].filter(Boolean))] as string[];
+    if (activeTab !== 'futures') return;
+    const codes = [
+      ...new Set([...futures.map((item) => item.code), selectedFutures].filter(Boolean)),
+    ] as string[];
     if (codes.length === 0) return;
 
-    let cancelled = false;
-    const load = async () => {
+    let isCancelled = false;
+    const refreshFuturesQuotes = async () => {
       try {
-        const map = await fetchMetalQuotes(codes);
-        if (!cancelled && map.size > 0) {
-          setMetalQuotes((prev) => {
+        const map = await fetchFuturesQuotes(codes);
+        if (!isCancelled && map.size > 0) {
+          setFuturesQuotes((prev) => {
             const next = new Map(prev);
             for (const [k, v] of map) next.set(k, v);
             return next;
@@ -140,15 +142,15 @@ export default function App() {
         // 失败保留旧数据
       }
     };
-    load();
-    const timer = setInterval(load, METAL_REFRESH_MS);
+    void refreshFuturesQuotes();
+    const timer = setInterval(refreshFuturesQuotes, FUTURES_REFRESH_MS);
     return () => {
-      cancelled = true;
+      isCancelled = true;
       clearInterval(timer);
     };
-  }, [activeTab, metals, selectedMetal]);
+  }, [activeTab, futures, selectedFutures]);
 
-  const handleAdd = useCallback((item: WatchItem) => {
+  const handleAddStock = useCallback((item: WatchItem) => {
     setWatchlist((prev) => {
       if (prev.some((w) => w.code === item.code)) return prev;
       const next = [...prev, item];
@@ -157,45 +159,45 @@ export default function App() {
     });
   }, []);
 
-  const handleRemove = useCallback(
+  const handleRemoveStock = useCallback(
     (code: string) => {
       setWatchlist((prev) => {
         const next = prev.filter((w) => w.code !== code);
         void saveWatchlist(next);
-        if (selected === code) {
-          setSelected(next[0]?.code ?? null);
+        if (selectedStock === code) {
+          setSelectedStock(next[0]?.code ?? null);
         }
         return next;
       });
     },
-    [selected]
+    [selectedStock]
   );
 
-  const handleAddMetal = useCallback((item: WatchItem) => {
-    setMetals((prev) => {
-      if (prev.some((m) => m.code === item.code)) return prev;
+  const handleAddFutures = useCallback((item: WatchItem) => {
+    setFutures((prev) => {
+      if (prev.some((entry) => entry.code === item.code)) return prev;
       const next = [...prev, item];
-      void saveMetals(next);
+      void saveFuturesList(next);
       return next;
     });
   }, []);
 
-  const handleRemoveMetal = useCallback(
+  const handleRemoveFutures = useCallback(
     (code: string) => {
-      setMetals((prev) => {
-        const next = prev.filter((m) => m.code !== code);
-        void saveMetals(next);
-        if (selectedMetal === code) {
-          setSelectedMetal(next[0]?.code ?? null);
+      setFutures((prev) => {
+        const next = prev.filter((item) => item.code !== code);
+        void saveFuturesList(next);
+        if (selectedFutures === code) {
+          setSelectedFutures(next[0]?.code ?? null);
         }
         return next;
       });
     },
-    [selectedMetal]
+    [selectedFutures]
   );
 
-  const isMetalTab = activeTab === 'metal';
-  const detailCode = isMetalTab ? selectedMetal : selected;
+  const isFuturesTab = activeTab === 'futures';
+  const detailCode = isFuturesTab ? selectedFutures : selectedStock;
 
   useLayoutEffect(() => {
     applyTheme(theme);
@@ -220,12 +222,12 @@ export default function App() {
   }, [theme]);
 
   const handleSelectStock = useCallback((code: string) => {
-    setSelected(code);
+    setSelectedStock(code);
     setMobileSidebarOpen(false);
   }, []);
 
-  const handleSelectMetal = useCallback((code: string) => {
-    setSelectedMetal(code);
+  const handleSelectFutures = useCallback((code: string) => {
+    setSelectedFutures(code);
     setMobileSidebarOpen(false);
   }, []);
 
@@ -263,25 +265,25 @@ export default function App() {
           activeTab={activeTab}
           onTabChange={setActiveTab}
           watchlist={watchlist}
-          quotes={quotes}
-          selected={selected}
+          quotes={stockQuotes}
+          selected={selectedStock}
           onSelect={handleSelectStock}
-          onAdd={handleAdd}
-          onRemove={handleRemove}
-          metals={metals}
-          metalQuotes={metalQuotes}
-          selectedMetal={selectedMetal}
-          onSelectMetal={handleSelectMetal}
-          onAddMetal={handleAddMetal}
-          onRemoveMetal={handleRemoveMetal}
+          onAdd={handleAddStock}
+          onRemove={handleRemoveStock}
+          futures={futures}
+          futuresQuotes={futuresQuotes}
+          selectedFutures={selectedFutures}
+          onSelectFutures={handleSelectFutures}
+          onAddFutures={handleAddFutures}
+          onRemoveFutures={handleRemoveFutures}
         />
       </div>
       {detailCode ? (
-        isMetalTab ? (
-          <MetalDetail
+        isFuturesTab ? (
+          <FuturesDetail
             code={detailCode}
-            name={metals.find((m) => m.code === detailCode)?.name}
-            quote={metalQuotes.get(detailCode)}
+            name={futures.find((item) => item.code === detailCode)?.name}
+            quote={futuresQuotes.get(detailCode)}
             theme={theme}
             onToggleTheme={toggleTheme}
             onShowSidebar={handleShowSidebar}
@@ -289,7 +291,7 @@ export default function App() {
         ) : (
           <StockDetail
             code={detailCode}
-            quote={quotes.get(detailCode)}
+            quote={stockQuotes.get(detailCode)}
             theme={theme}
             onToggleTheme={toggleTheme}
             onShowSidebar={handleShowSidebar}
@@ -301,7 +303,7 @@ export default function App() {
           <div className="detail-placeholder">
             <div className="big">📈</div>
             <div>
-              {isMetalTab
+              {isFuturesTab
                 ? '在左侧搜索并添加期货品种，点击查看详情'
                 : '在左侧搜索并添加自选股，点击查看详情'}
             </div>

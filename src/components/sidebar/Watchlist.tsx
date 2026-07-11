@@ -1,39 +1,41 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  searchMetals,
+  searchFutures,
   searchStocks,
-  type AppQuote,
-  type MetalQuote,
-  type MetalSearchItem,
-  type StockSearchItem,
-} from '../sdk';
-import type { WatchItem } from '../storage';
+} from '../../services/marketData';
+import type { WatchItem } from '../../services/storage';
+import type {
+  FuturesQuote,
+  FuturesSearchResult,
+  SecurityQuote,
+  StockSearchResult,
+} from '../../types/market';
 import {
-  exchangeInfo,
-  fmtCode,
-  fmtPercent,
-  fmtPriceCur,
-  metalExchangeInfo,
-  trendClass,
-} from '../format';
+  formatCurrencyPrice,
+  formatPercent,
+  formatSecurityCode,
+  getFuturesExchangeInfo,
+  getSecurityExchangeInfo,
+  getTrendClass,
+} from '../../utils/formatters';
 
-export type SidebarTab = 'stock' | 'metal';
+export type SidebarTab = 'stock' | 'futures';
 
 interface Props {
   activeTab: SidebarTab;
   onTabChange: (tab: SidebarTab) => void;
   watchlist: WatchItem[];
-  quotes: Map<string, AppQuote>;
+  quotes: Map<string, SecurityQuote>;
   selected: string | null;
   onSelect: (code: string) => void;
   onAdd: (item: WatchItem) => void;
   onRemove: (code: string) => void;
-  metals: WatchItem[];
-  metalQuotes: Map<string, MetalQuote>;
-  selectedMetal: string | null;
-  onSelectMetal: (code: string) => void;
-  onAddMetal: (item: WatchItem) => void;
-  onRemoveMetal: (code: string) => void;
+  futures: WatchItem[];
+  futuresQuotes: Map<string, FuturesQuote>;
+  selectedFutures: string | null;
+  onSelectFutures: (code: string) => void;
+  onAddFutures: (item: WatchItem) => void;
+  onRemoveFutures: (code: string) => void;
 }
 
 export default function Watchlist({
@@ -45,78 +47,75 @@ export default function Watchlist({
   onSelect,
   onAdd,
   onRemove,
-  metals,
-  metalQuotes,
-  selectedMetal,
-  onSelectMetal,
-  onAddMetal,
-  onRemoveMetal,
+  futures,
+  futuresQuotes,
+  selectedFutures,
+  onSelectFutures,
+  onAddFutures,
+  onRemoveFutures,
 }: Props) {
   const [keyword, setKeyword] = useState('');
-  const [stockResults, setStockResults] = useState<StockSearchItem[] | null>(null);
-  const [metalResults, setMetalResults] = useState<MetalSearchItem[] | null>(null);
+  const [stockResults, setStockResults] = useState<StockSearchResult[] | null>(null);
+  const [futuresResults, setFuturesResults] = useState<FuturesSearchResult[] | null>(null);
   const [searching, setSearching] = useState(false);
   const boxRef = useRef<HTMLDivElement>(null);
 
-  const isMetalTab = activeTab === 'metal';
+  const isFuturesTab = activeTab === 'futures';
 
-  // 切换 tab 时清空搜索
   useEffect(() => {
     setKeyword('');
     setStockResults(null);
-    setMetalResults(null);
+    setFuturesResults(null);
   }, [activeTab]);
 
-  // 防抖搜索：股票 / 期货按当前 tab 分流
   useEffect(() => {
-    const kw = keyword.trim();
-    if (!kw) {
+    const trimmedKeyword = keyword.trim();
+    if (!trimmedKeyword) {
       setStockResults(null);
-      setMetalResults(null);
+      setFuturesResults(null);
       setSearching(false);
       return;
     }
     setSearching(true);
-    let cancelled = false;
+    let isCancelled = false;
     const timer = setTimeout(async () => {
       try {
-        if (isMetalTab) {
-          const list = await searchMetals(kw);
-          if (!cancelled) setMetalResults(list);
+        if (isFuturesTab) {
+          const results = await searchFutures(trimmedKeyword);
+          if (!isCancelled) setFuturesResults(results);
         } else {
-          const list = await searchStocks(kw);
-          if (!cancelled) setStockResults(list);
+          const results = await searchStocks(trimmedKeyword);
+          if (!isCancelled) setStockResults(results);
         }
       } catch {
-        if (!cancelled) {
-          if (isMetalTab) setMetalResults([]);
+        if (!isCancelled) {
+          if (isFuturesTab) setFuturesResults([]);
           else setStockResults([]);
         }
       } finally {
-        if (!cancelled) setSearching(false);
+        if (!isCancelled) setSearching(false);
       }
     }, 300);
     return () => {
-      cancelled = true;
+      isCancelled = true;
       clearTimeout(timer);
     };
-  }, [keyword, isMetalTab]);
+  }, [keyword, isFuturesTab]);
 
-  // 点击外部关闭下拉
   useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (boxRef.current && !boxRef.current.contains(e.target as Node)) {
+    const closeSearchOnOutsideClick = (event: MouseEvent) => {
+      if (boxRef.current && !boxRef.current.contains(event.target as Node)) {
         setKeyword('');
       }
     };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
+    document.addEventListener('mousedown', closeSearchOnOutsideClick);
+    return () => document.removeEventListener('mousedown', closeSearchOnOutsideClick);
   }, []);
 
   const watchedCodes = new Set(watchlist.map((w) => w.code));
-  const metalCodes = new Set(metals.map((m) => m.code));
+  const futuresCodes = new Set(futures.map((item) => item.code));
 
-  const handlePickStock = (item: StockSearchItem) => {
+  const handlePickStock = (item: StockSearchResult) => {
     if (!watchedCodes.has(item.code)) {
       onAdd(item);
     }
@@ -124,29 +123,29 @@ export default function Watchlist({
     setKeyword('');
   };
 
-  const handlePickMetal = (item: MetalSearchItem) => {
-    if (!metalCodes.has(item.code)) {
-      onAddMetal({ code: item.code, name: item.name });
+  const handlePickFutures = (item: FuturesSearchResult) => {
+    if (!futuresCodes.has(item.code)) {
+      onAddFutures({ code: item.code, name: item.name });
     }
-    onSelectMetal(item.code);
+    onSelectFutures(item.code);
     setKeyword('');
   };
 
-  const results = isMetalTab ? metalResults : stockResults;
+  const results = isFuturesTab ? futuresResults : stockResults;
 
   return (
     <aside className="sidebar">
       <div className="sidebar-header">
         <div className="sidebar-tabs">
           <button
-            className={`sidebar-tab${!isMetalTab ? ' active' : ''}`}
+            className={`sidebar-tab${!isFuturesTab ? ' active' : ''}`}
             onClick={() => onTabChange('stock')}
           >
             自选
           </button>
           <button
-            className={`sidebar-tab${isMetalTab ? ' active' : ''}`}
-            onClick={() => onTabChange('metal')}
+            className={`sidebar-tab${isFuturesTab ? ' active' : ''}`}
+            onClick={() => onTabChange('futures')}
           >
             期货
           </button>
@@ -157,7 +156,7 @@ export default function Watchlist({
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
             placeholder={
-              isMetalTab ? '搜索期货品种，如 黄金 / GC' : '搜索 A股 / 美股代码、名称、拼音'
+              isFuturesTab ? '搜索期货品种，如 黄金 / GC' : '搜索 A股 / 美股代码、名称、拼音'
             }
           />
           {keyword.trim() && (
@@ -165,24 +164,24 @@ export default function Watchlist({
               {searching ? (
                 <div className="search-empty">搜索中…</div>
               ) : results && results.length > 0 ? (
-                isMetalTab ? (
-                  metalResults!.map((r) => {
-                    const ex = metalExchangeInfo(r.name);
-                    const isAdded = metalCodes.has(r.code);
+                isFuturesTab ? (
+                  futuresResults?.map((result) => {
+                    const exchange = getFuturesExchangeInfo(result.name);
+                    const isAdded = futuresCodes.has(result.code);
                     return (
                       <div
-                        key={r.code}
+                        key={result.code}
                         className={`search-item${isAdded ? ' is-added' : ''}`}
-                        onClick={() => handlePickMetal(r)}
+                        onClick={() => handlePickFutures(result)}
                       >
                         <span className="name">
-                          <span className="market-tag metal" title={ex.full}>
-                            {ex.label}
+                          <span className="market-tag futures" title={exchange.full}>
+                            {exchange.label}
                           </span>
-                          {r.name}
+                          {result.name}
                         </span>
                         <span className="search-item-meta">
-                          <span className="code">{r.code}</span>
+                          <span className="code">{result.code}</span>
                           {isAdded && (
                             <span
                               className="search-added-status"
@@ -197,26 +196,26 @@ export default function Watchlist({
                     );
                   })
                 ) : (
-                  stockResults!.map((r) => {
-                    const ex = exchangeInfo(r.code);
-                    const isAdded = watchedCodes.has(r.code);
+                  stockResults?.map((result) => {
+                    const exchange = getSecurityExchangeInfo(result.code);
+                    const isAdded = watchedCodes.has(result.code);
                     return (
                       <div
-                        key={r.code}
+                        key={result.code}
                         className={`search-item${isAdded ? ' is-added' : ''}`}
-                        onClick={() => handlePickStock(r)}
+                        onClick={() => handlePickStock(result)}
                       >
                         <span className="name">
                           <span
-                            className={`market-tag ${ex.market === 'US' ? 'us' : 'a'}`}
-                            title={ex.full}
+                            className={`market-tag ${exchange.market === 'US' ? 'us' : 'a'}`}
+                            title={exchange.full}
                           >
-                            {ex.label}
+                            {exchange.label}
                           </span>
-                          {r.name}
+                          {result.name}
                         </span>
                         <span className="search-item-meta">
-                          <span className="code">{fmtCode(r.code)}</span>
+                          <span className="code">{formatSecurityCode(result.code)}</span>
                           {isAdded && (
                             <span
                               className="search-added-status"
@@ -233,7 +232,7 @@ export default function Watchlist({
                 )
               ) : (
                 <div className="search-empty">
-                  {isMetalTab ? '未找到相关期货品种' : '未找到相关股票'}
+                  {isFuturesTab ? '未找到相关期货品种' : '未找到相关股票'}
                 </div>
               )}
             </div>
@@ -242,39 +241,39 @@ export default function Watchlist({
       </div>
 
       <div className="watch-list">
-        {isMetalTab ? (
-          metals.length === 0 ? (
+        {isFuturesTab ? (
+          futures.length === 0 ? (
             <div className="watch-empty">
               期货列表为空
               <br />
               使用上方搜索框添加期货
             </div>
           ) : (
-            metals.map((item) => {
-              const q = metalQuotes.get(item.code);
-              const cls = trendClass(q?.changePercent);
-              const ex = metalExchangeInfo(q?.name ?? item.name);
+            futures.map((item) => {
+              const quote = futuresQuotes.get(item.code);
+              const trend = getTrendClass(quote?.changePercent);
+              const exchange = getFuturesExchangeInfo(quote?.name ?? item.name);
               return (
                 <div
                   key={item.code}
-                  className={`watch-row${selectedMetal === item.code ? ' active' : ''}`}
-                  onClick={() => onSelectMetal(item.code)}
+                  className={`watch-row${selectedFutures === item.code ? ' active' : ''}`}
+                  onClick={() => onSelectFutures(item.code)}
                 >
                   <div className="watch-info">
-                    <div className="watch-name">{q?.name || item.name}</div>
+                    <div className="watch-name">{quote?.name || item.name}</div>
                     <div className="watch-code">
-                      <span className="market-tag metal" title={ex.full}>
-                        {ex.label}
+                      <span className="market-tag futures" title={exchange.full}>
+                        {exchange.label}
                       </span>
                       {item.code}
                     </div>
                   </div>
                   <div className="watch-quote">
-                    <div className={`watch-price ${cls}`}>
-                      {fmtPriceCur(q?.price, ex.symbol)}
+                    <div className={`watch-price ${trend}`}>
+                      {formatCurrencyPrice(quote?.price, exchange.symbol)}
                     </div>
-                    <div className={`watch-percent ${cls}`}>
-                      {fmtPercent(q?.changePercent)}
+                    <div className={`watch-percent ${trend}`}>
+                      {formatPercent(quote?.changePercent)}
                     </div>
                   </div>
                   <button
@@ -282,7 +281,7 @@ export default function Watchlist({
                     title="移除"
                     onClick={(e) => {
                       e.stopPropagation();
-                      onRemoveMetal(item.code);
+                      onRemoveFutures(item.code);
                     }}
                   >
                     ✕
@@ -299,9 +298,9 @@ export default function Watchlist({
           </div>
         ) : (
           watchlist.map((item) => {
-            const q = quotes.get(item.code);
-            const cls = trendClass(q?.changePercent);
-            const ex = exchangeInfo(item.code);
+            const quote = quotes.get(item.code);
+            const trend = getTrendClass(quote?.changePercent);
+            const exchange = getSecurityExchangeInfo(item.code);
             return (
               <div
                 key={item.code}
@@ -309,23 +308,23 @@ export default function Watchlist({
                 onClick={() => onSelect(item.code)}
               >
                 <div className="watch-info">
-                  <div className="watch-name">{q?.name || item.name}</div>
+                  <div className="watch-name">{quote?.name || item.name}</div>
                   <div className="watch-code">
                     <span
-                      className={`market-tag ${ex.market === 'US' ? 'us' : 'a'}`}
-                      title={ex.full}
+                      className={`market-tag ${exchange.market === 'US' ? 'us' : 'a'}`}
+                      title={exchange.full}
                     >
-                      {ex.label}
+                      {exchange.label}
                     </span>
-                    {fmtCode(item.code)}
+                    {formatSecurityCode(item.code)}
                   </div>
                 </div>
                 <div className="watch-quote">
-                  <div className={`watch-price ${cls}`}>
-                    {fmtPriceCur(q?.price, ex.symbol)}
+                  <div className={`watch-price ${trend}`}>
+                    {formatCurrencyPrice(quote?.price, exchange.symbol)}
                   </div>
-                  <div className={`watch-percent ${cls}`}>
-                    {fmtPercent(q?.changePercent)}
+                  <div className={`watch-percent ${trend}`}>
+                    {formatPercent(quote?.changePercent)}
                   </div>
                 </div>
                 <button
