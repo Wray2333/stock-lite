@@ -5,3 +5,4 @@ data/eastmoney-cookie.txt
 .idea
 .vscode
 /data/storage.json
+/data
